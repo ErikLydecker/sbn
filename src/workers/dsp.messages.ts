@@ -23,12 +23,67 @@ export interface PriceTickData {
   denoisedReturn: number
 }
 
+export interface DspTickData {
+  timestamp: number
+  rawPhaseDeg?: number
+  rawRBar?: number
+  rawCyclePosition?: number
+  rawDominantK?: number
+  rawMeanPhase?: number
+  smoothPhaseDeg?: number
+  smoothRBar?: number
+  vmKappa?: number
+  vmMu?: number
+  clockPosition?: number
+  clockVelocity?: number
+  hmmAlpha?: number[]
+  hmmActiveState?: number
+  tDom?: number
+  tDomFrac?: number
+  goertzelDomK?: number
+  goertzelConfidence?: number
+  tau?: number
+  embeddingDim?: number
+  embedSpan?: number
+  phaseWindow?: number
+  vmHorizon?: number
+  vmLambda?: number
+  hmmDwell?: number
+  hmmPSelf?: number
+  barCount?: number
+  recurrenceRate?: number
+  corrDimEstimate?: number
+  structureScore?: number
+  rawFrequencies?: unknown[]
+  goertzelSpectrum?: unknown[]
+  trail?: number[]
+}
+
+export interface PolarRoseData {
+  timestamp: number
+  phase: number
+  kappa: number
+  regimeId: number
+}
+
+export interface VoxelSnapshotData {
+  timestamp: number
+  embeddingVecs?: number[][]
+  recurrenceSize?: number
+  recurrenceRate?: number
+  corrDimEstimate?: number
+  structureScore?: number
+}
+
 export type WorkerOutbound =
   | { type: 'raw'; data: RawAnalysis }
   | { type: 'smooth'; data: SmoothAnalysis }
   | { type: 'portfolio'; data: PortfolioWorkerData }
   | { type: 'geometry'; data: GeometryWorkerData }
   | { type: 'priceTick'; data: PriceTickData }
+  | { type: 'dspTick'; data: DspTickData }
+  | { type: 'polarRose'; data: PolarRoseData }
+  | { type: 'voxelSnapshot'; data: VoxelSnapshotData }
   | { type: 'barCount'; count: number }
   | { type: 'candles'; bars: OhlcBar[] }
 

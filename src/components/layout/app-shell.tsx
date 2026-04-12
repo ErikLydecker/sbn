@@ -3,6 +3,7 @@ import { Sidebar } from './sidebar'
 import { Topbar } from './topbar'
 import { Providers } from '@/app/providers'
 import { useDspWorker } from '@/hooks/use-dsp-worker'
+import { useRealtimeSubscriptions } from '@/hooks/use-realtime'
 
 interface AppShellProps {
   children: ReactNode
@@ -10,6 +11,7 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   useDspWorker()
+  useRealtimeSubscriptions()
 
   return (
     <Providers>

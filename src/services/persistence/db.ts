@@ -1,6 +1,11 @@
 import { supabase } from '@/lib/supabase'
+import type { Json } from '@/types/supabase'
 
 export const PERSISTENCE_VERSION = 3
+
+// ---------------------------------------------------------------------------
+// Interfaces
+// ---------------------------------------------------------------------------
 
 export interface PersistedGpState {
   regimeId: number
@@ -50,6 +55,69 @@ export interface CoherencePoint {
   tDom?: number
 }
 
+export interface PriceTick {
+  timestamp: number
+  price: number
+  logReturn: number
+  denoisedReturn: number
+}
+
+export interface DspTick {
+  timestamp: number
+  rawPhaseDeg?: number
+  rawRBar?: number
+  rawCyclePosition?: number
+  rawDominantK?: number
+  rawMeanPhase?: number
+  smoothPhaseDeg?: number
+  smoothRBar?: number
+  vmKappa?: number
+  vmMu?: number
+  clockPosition?: number
+  clockVelocity?: number
+  hmmAlpha?: number[]
+  hmmActiveState?: number
+  tDom?: number
+  tDomFrac?: number
+  goertzelDomK?: number
+  goertzelConfidence?: number
+  tau?: number
+  embeddingDim?: number
+  embedSpan?: number
+  phaseWindow?: number
+  vmHorizon?: number
+  vmLambda?: number
+  hmmDwell?: number
+  hmmPSelf?: number
+  barCount?: number
+  recurrenceRate?: number
+  corrDimEstimate?: number
+  structureScore?: number
+  rawFrequencies?: unknown[]
+  goertzelSpectrum?: unknown[]
+  trail?: number[]
+}
+
+export interface PolarRosePoint {
+  timestamp: number
+  phase: number
+  kappa: number
+  regimeId: number
+}
+
+export interface VoxelSnapshot {
+  timestamp: number
+  embeddingVecs?: number[][]
+  recurrenceSize?: number
+  recurrenceRate?: number
+  corrDimEstimate?: number
+  structureScore?: number
+}
+
+// ---------------------------------------------------------------------------
+// GP States
+// ---------------------------------------------------------------------------
+
 export async function saveGpStates(
   gps: { X: number[][]; y: number[]; Kinv: number[][] | null }[],
 ): Promise<void> {
@@ -79,6 +147,12 @@ export async function loadGpStates(): Promise<PersistedGpState[] | null> {
   }))
 }
 
+// ---------------------------------------------------------------------------
+// Portfolio (trades are now append-only)
+// ---------------------------------------------------------------------------
+
+let lastPersistedTradeCount = 0
+
 export async function savePortfolio(data: Omit<PersistedPortfolio, 'id' | 'version' | 'savedAt'>): Promise<void> {
   const { error: portfolioError } = await supabase.from('portfolio').upsert({
     id: 'current',
@@ -93,11 +167,10 @@ export async function savePortfolio(data: Omit<PersistedPortfolio, 'id' | 'versi
   }, { onConflict: 'id' })
   if (portfolioError) throw portfolioError
 
-  await supabase.from('trades').delete().gte('id', 0)
-
-  const trades = data.trades as Record<string, unknown>[]
-  if (trades.length > 0) {
-    const tradeRows = trades.map((t) => ({
+  const allTrades = data.trades as Record<string, unknown>[]
+  const newTrades = allTrades.slice(lastPersistedTradeCount)
+  if (newTrades.length > 0) {
+    const tradeRows = newTrades.map((t) => ({
       regime_id: t.regimeId as number,
       direction: t.direction as number,
       pnl: t.pnl as number,
@@ -114,6 +187,7 @@ export async function savePortfolio(data: Omit<PersistedPortfolio, 'id' | 'versi
     const { error: tradesError } = await supabase.from('trades').insert(tradeRows)
     if (tradesError) throw tradesError
   }
+  lastPersistedTradeCount = allTrades.length
 }
 
 export async function loadPortfolio(): Promise<PersistedPortfolio | null> {
@@ -146,6 +220,8 @@ export async function loadPortfolio(): Promise<PersistedPortfolio | null> {
     entryRBar: t.entry_r_bar,
   }))
 
+  lastPersistedTradeCount = trades.length
+
   return {
     id: 'current',
     version: row.version,
@@ -159,6 +235,10 @@ export async function loadPortfolio(): Promise<PersistedPortfolio | null> {
     savedAt: new Date(row.saved_at).getTime(),
   }
 }
+
+// ---------------------------------------------------------------------------
+// Smooth State
+// ---------------------------------------------------------------------------
 
 export async function saveSmoothState(state: Omit<PersistedSmoothState, 'id'>): Promise<void> {
   const { error } = await supabase.from('smooth_state').upsert({
@@ -209,6 +289,10 @@ export async function loadSmoothState(): Promise<PersistedSmoothState | null> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Clear
+// ---------------------------------------------------------------------------
+
 export async function clearPersistedState(): Promise<void> {
   await Promise.all([
     supabase.from('gp_states').delete().gte('regime_id', 0),
@@ -216,7 +300,12 @@ export async function clearPersistedState(): Promise<void> {
     supabase.from('trades').delete().gte('id', 0),
     supabase.from('smooth_state').delete().eq('id', 'current'),
   ])
+  lastPersistedTradeCount = 0
 }
+
+// ---------------------------------------------------------------------------
+// Coherence History
+// ---------------------------------------------------------------------------
 
 const MAX_COHERENCE_POINTS = 2000
 
@@ -252,12 +341,26 @@ export async function appendCoherencePoints(points: CoherencePoint[]): Promise<v
   }
 }
 
-export interface PriceTick {
-  timestamp: number
-  price: number
-  logReturn: number
-  denoisedReturn: number
+export async function loadCoherenceHistory(): Promise<CoherencePoint[]> {
+  const { data, error } = await supabase
+    .from('coherence_history')
+    .select('*')
+    .order('timestamp', { ascending: true })
+  if (error) throw error
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    timestamp: row.timestamp,
+    rBar: row.r_bar,
+    kappa: row.kappa,
+    recurrenceRate: row.recurrence_rate ?? undefined,
+    structureScore: row.structure_score ?? undefined,
+    tDom: row.t_dom ?? undefined,
+  }))
 }
+
+// ---------------------------------------------------------------------------
+// Price Series
+// ---------------------------------------------------------------------------
 
 const MAX_PRICE_TICKS = 10_000
 
@@ -291,19 +394,78 @@ export async function appendPriceTicks(ticks: PriceTick[]): Promise<void> {
   }
 }
 
-export async function loadCoherenceHistory(): Promise<CoherencePoint[]> {
-  const { data, error } = await supabase
-    .from('coherence_history')
-    .select('*')
-    .order('timestamp', { ascending: true })
-  if (error) throw error
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    timestamp: row.timestamp,
-    rBar: row.r_bar,
-    kappa: row.kappa,
-    recurrenceRate: row.recurrence_rate ?? undefined,
-    structureScore: row.structure_score ?? undefined,
-    tDom: row.t_dom ?? undefined,
+// ---------------------------------------------------------------------------
+// DSP Ticks
+// ---------------------------------------------------------------------------
+
+export async function appendDspTicks(ticks: DspTick[]): Promise<void> {
+  const rows = ticks.map((t) => ({
+    timestamp: t.timestamp,
+    raw_phase_deg: t.rawPhaseDeg ?? null,
+    raw_r_bar: t.rawRBar ?? null,
+    raw_cycle_position: t.rawCyclePosition ?? null,
+    raw_dominant_k: t.rawDominantK ?? null,
+    raw_mean_phase: t.rawMeanPhase ?? null,
+    smooth_phase_deg: t.smoothPhaseDeg ?? null,
+    smooth_r_bar: t.smoothRBar ?? null,
+    vm_kappa: t.vmKappa ?? null,
+    vm_mu: t.vmMu ?? null,
+    clock_position: t.clockPosition ?? null,
+    clock_velocity: t.clockVelocity ?? null,
+    hmm_alpha: t.hmmAlpha ?? null,
+    hmm_active_state: t.hmmActiveState ?? null,
+    t_dom: t.tDom ?? null,
+    t_dom_frac: t.tDomFrac ?? null,
+    goertzel_dom_k: t.goertzelDomK ?? null,
+    goertzel_confidence: t.goertzelConfidence ?? null,
+    tau: t.tau ?? null,
+    embedding_dim: t.embeddingDim ?? null,
+    embed_span: t.embedSpan ?? null,
+    phase_window: t.phaseWindow ?? null,
+    vm_horizon: t.vmHorizon ?? null,
+    vm_lambda: t.vmLambda ?? null,
+    hmm_dwell: t.hmmDwell ?? null,
+    hmm_p_self: t.hmmPSelf ?? null,
+    bar_count: t.barCount ?? null,
+    recurrence_rate: t.recurrenceRate ?? null,
+    corr_dim_estimate: t.corrDimEstimate ?? null,
+    structure_score: t.structureScore ?? null,
+    raw_frequencies: (t.rawFrequencies as Json[] | undefined) ?? null,
+    goertzel_spectrum: (t.goertzelSpectrum as Json[] | undefined) ?? null,
+    trail: (t.trail as Json | undefined) ?? null,
   }))
+  const { error } = await supabase.from('dsp_ticks').insert(rows)
+  if (error) throw error
+}
+
+// ---------------------------------------------------------------------------
+// Polar Rose
+// ---------------------------------------------------------------------------
+
+export async function appendPolarRosePoints(points: PolarRosePoint[]): Promise<void> {
+  const rows = points.map((p) => ({
+    timestamp: p.timestamp,
+    phase: p.phase,
+    kappa: p.kappa,
+    regime_id: p.regimeId,
+  }))
+  const { error } = await supabase.from('polar_rose').insert(rows)
+  if (error) throw error
+}
+
+// ---------------------------------------------------------------------------
+// Voxel Snapshots
+// ---------------------------------------------------------------------------
+
+export async function appendVoxelSnapshots(snapshots: VoxelSnapshot[]): Promise<void> {
+  const rows = snapshots.map((s) => ({
+    timestamp: s.timestamp,
+    embedding_vecs: s.embeddingVecs ?? null,
+    recurrence_size: s.recurrenceSize ?? null,
+    recurrence_rate: s.recurrenceRate ?? null,
+    corr_dim_estimate: s.corrDimEstimate ?? null,
+    structure_score: s.structureScore ?? null,
+  }))
+  const { error } = await supabase.from('voxel_snapshots').insert(rows)
+  if (error) throw error
 }

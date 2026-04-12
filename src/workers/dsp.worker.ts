@@ -126,11 +126,14 @@ function runAnalysis(price: number) {
   const smoothResult = analyseSmooth(bars, smoothState)
   if (smoothResult) {
     smoothState = smoothResult.state
-    post({ type: 'smooth', data: smoothResult.result })
+    const sr = smoothResult.result
+    post({ type: 'smooth', data: sr })
 
-    if (!smoothResult.result.isBootstrapping) {
-      const pr = smoothResult.result.pipelineReturns
-      const pd = smoothResult.result.pipelineDenoised
+    if (!sr.isBootstrapping) {
+      const now = Date.now()
+
+      const pr = sr.pipelineReturns
+      const pd = sr.pipelineDenoised
       if (pr && pr.length >= 2 && pd && pd.length >= 2) {
         const prev = pr[pr.length - 2]!
         const cur = pr[pr.length - 1]!
@@ -138,8 +141,67 @@ function runAnalysis(price: number) {
         const prevD = pd[pd.length - 2]!
         const curD = pd[pd.length - 1]!
         const denoisedRet = prevD > 0 ? Math.log(curD / prevD) : 0
-        post({ type: 'priceTick', data: { timestamp: Date.now(), price, logReturn: logRet, denoisedReturn: denoisedRet } })
+        post({ type: 'priceTick', data: { timestamp: now, price, logReturn: logRet, denoisedReturn: denoisedRet } })
       }
+
+      post({
+        type: 'dspTick',
+        data: {
+          timestamp: now,
+          rawPhaseDeg: rawResult?.phaseDeg,
+          rawRBar: rawResult?.rBar,
+          rawCyclePosition: rawResult?.cyclePosition,
+          rawDominantK: rawResult?.dominantK,
+          rawMeanPhase: rawResult?.meanPhase,
+          smoothPhaseDeg: sr.phaseDeg,
+          smoothRBar: sr.rBar,
+          vmKappa: sr.vmKappa,
+          vmMu: sr.vmMu,
+          clockPosition: sr.clockPosition,
+          clockVelocity: sr.clockVelocity,
+          hmmAlpha: [...sr.hmmAlpha],
+          hmmActiveState: sr.hmmActiveState,
+          tDom: sr.tDom,
+          tDomFrac: sr.tDomFrac,
+          goertzelDomK: sr.goertzelDomK,
+          goertzelConfidence: sr.goertzelConfidence,
+          tau: sr.tau,
+          embeddingDim: sr.embeddingDim,
+          embedSpan: sr.embedSpan,
+          phaseWindow: sr.phaseWindow,
+          vmHorizon: sr.vmHorizon,
+          vmLambda: sr.vmLambda,
+          hmmDwell: sr.hmmDwell,
+          hmmPSelf: sr.hmmPSelf,
+          barCount: sr.barCount,
+          recurrenceRate: sr.recurrenceRate,
+          corrDimEstimate: sr.corrDimEstimate,
+          structureScore: sr.structureScore,
+          rawFrequencies: rawResult?.frequencies,
+          goertzelSpectrum: sr.goertzelSpectrum,
+          trail: sr.trail,
+        },
+      })
+
+      const lastEntry = smoothState.phaseKappaHistory[smoothState.phaseKappaHistory.length - 1]
+      if (lastEntry) {
+        post({
+          type: 'polarRose',
+          data: { timestamp: now, phase: lastEntry.phase, kappa: lastEntry.kappa, regimeId: lastEntry.regimeId },
+        })
+      }
+
+      post({
+        type: 'voxelSnapshot',
+        data: {
+          timestamp: now,
+          embeddingVecs: sr.embeddingVecs,
+          recurrenceSize: sr.recurrenceSize,
+          recurrenceRate: sr.recurrenceRate,
+          corrDimEstimate: sr.corrDimEstimate,
+          structureScore: sr.structureScore,
+        },
+      })
     }
 
     if (smoothState.phaseKappaHistory.length > 0) {
@@ -152,7 +214,7 @@ function runAnalysis(price: number) {
       })
     }
 
-    if (!smoothResult.result.isBootstrapping && smoothState.vmKappa >= 0.1 && bars.length >= DSP_CONFIG.minBootstrapBars) {
+    if (!sr.isBootstrapping && smoothState.vmKappa >= 0.1 && bars.length >= DSP_CONFIG.minBootstrapBars) {
       const snapshot: ClockSnapshot = {
         alpha: smoothState.alpha,
         kappa: smoothState.vmKappa,

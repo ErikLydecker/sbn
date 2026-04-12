@@ -8,13 +8,22 @@ import { useSettingsStore } from '@/stores/settings.store'
 import { useCoherenceHistoryStore } from '@/stores/coherence-history.store'
 import { ConnectionManager } from '@/services/binance/connection-manager'
 import { fetchHistoricalKlines } from '@/services/binance/klines'
-import { loadCoherenceHistory, appendCoherencePoints, appendPriceTicks } from '@/services/persistence/db'
-import type { PriceTick } from '@/services/persistence/db'
+import {
+  appendCoherencePoints,
+  appendPriceTicks,
+  appendDspTicks,
+  appendPolarRosePoints,
+  appendVoxelSnapshots,
+} from '@/services/persistence/db'
+import type { PriceTick, DspTick, PolarRosePoint, VoxelSnapshot } from '@/services/persistence/db'
 import { BINANCE_CONFIG } from '@/config/binance'
 import { DSP_CONFIG } from '@/config/dsp'
 import type { WorkerInbound, WorkerOutbound } from '@/workers/dsp.messages'
 
 let priceTickBuffer: PriceTick[] = []
+let dspTickBuffer: DspTick[] = []
+let polarRoseBuffer: PolarRosePoint[] = []
+let voxelBuffer: VoxelSnapshot[] = []
 
 export function useDspWorker() {
   const workerRef = useRef<Worker | null>(null)
@@ -30,9 +39,7 @@ export function useDspWorker() {
   const setConnectionStatus = useConnectionStore((s) => s.setStatus)
   const setConnectionHealth = useConnectionStore((s) => s.setHealth)
   const pushCoherence = useCoherenceHistoryStore((s) => s.push)
-  const loadCoherence = useCoherenceHistoryStore((s) => s.load)
   const flushCoherence = useCoherenceHistoryStore((s) => s.flush)
-  const coherenceLoaded = useCoherenceHistoryStore((s) => s.loaded)
 
   const rawWindow = useSettingsStore((s) => s.rawWindow)
   const manualK = useSettingsStore((s) => s.manualFrequencyK)
@@ -81,6 +88,15 @@ export function useDspWorker() {
         case 'priceTick':
           priceTickBuffer.push(msg.data)
           break
+        case 'dspTick':
+          dspTickBuffer.push(msg.data)
+          break
+        case 'polarRose':
+          polarRoseBuffer.push(msg.data)
+          break
+        case 'voxelSnapshot':
+          voxelBuffer.push(msg.data)
+          break
         case 'candles':
           setCandles(msg.bars)
           break
@@ -120,20 +136,21 @@ export function useDspWorker() {
   }, [rawWindow, manualK, timeframe])
 
   useEffect(() => {
-    if (coherenceLoaded) return
-    loadCoherenceHistory()
-      .then((pts) => loadCoherence(pts))
-      .catch(() => {})
-  }, [coherenceLoaded, loadCoherence])
-
-  useEffect(() => {
     const id = setInterval(() => {
-      const batch = flushCoherence()
-      if (batch.length > 0) appendCoherencePoints(batch).catch(() => {})
+      const coherenceBatch = flushCoherence()
+      if (coherenceBatch.length > 0) appendCoherencePoints(coherenceBatch).catch(() => {})
 
-      const priceBatch = priceTickBuffer
-      priceTickBuffer = []
+      const priceBatch = priceTickBuffer; priceTickBuffer = []
       if (priceBatch.length > 0) appendPriceTicks(priceBatch).catch(() => {})
+
+      const dspBatch = dspTickBuffer; dspTickBuffer = []
+      if (dspBatch.length > 0) appendDspTicks(dspBatch).catch(() => {})
+
+      const polarBatch = polarRoseBuffer; polarRoseBuffer = []
+      if (polarBatch.length > 0) appendPolarRosePoints(polarBatch).catch(() => {})
+
+      const voxelBatch = voxelBuffer; voxelBuffer = []
+      if (voxelBatch.length > 0) appendVoxelSnapshots(voxelBatch).catch(() => {})
     }, 10_000)
     return () => clearInterval(id)
   }, [flushCoherence])

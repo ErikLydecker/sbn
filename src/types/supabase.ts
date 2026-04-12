@@ -42,6 +42,117 @@ export type Database = {
         }
         Relationships: []
       }
+      dsp_ticks: {
+        Row: {
+          bar_count: number | null
+          clock_position: number | null
+          clock_velocity: number | null
+          corr_dim_estimate: number | null
+          embed_span: number | null
+          embedding_dim: number | null
+          goertzel_confidence: number | null
+          goertzel_dom_k: number | null
+          goertzel_spectrum: Json | null
+          hmm_active_state: number | null
+          hmm_alpha: Json | null
+          hmm_dwell: number | null
+          hmm_p_self: number | null
+          id: number
+          phase_window: number | null
+          raw_cycle_position: number | null
+          raw_dominant_k: number | null
+          raw_frequencies: Json | null
+          raw_mean_phase: number | null
+          raw_phase_deg: number | null
+          raw_r_bar: number | null
+          recurrence_rate: number | null
+          smooth_phase_deg: number | null
+          smooth_r_bar: number | null
+          structure_score: number | null
+          t_dom: number | null
+          t_dom_frac: number | null
+          tau: number | null
+          timestamp: number
+          trail: Json | null
+          vm_horizon: number | null
+          vm_kappa: number | null
+          vm_lambda: number | null
+          vm_mu: number | null
+        }
+        Insert: {
+          bar_count?: number | null
+          clock_position?: number | null
+          clock_velocity?: number | null
+          corr_dim_estimate?: number | null
+          embed_span?: number | null
+          embedding_dim?: number | null
+          goertzel_confidence?: number | null
+          goertzel_dom_k?: number | null
+          goertzel_spectrum?: Json | null
+          hmm_active_state?: number | null
+          hmm_alpha?: Json | null
+          hmm_dwell?: number | null
+          hmm_p_self?: number | null
+          id?: never
+          phase_window?: number | null
+          raw_cycle_position?: number | null
+          raw_dominant_k?: number | null
+          raw_frequencies?: Json | null
+          raw_mean_phase?: number | null
+          raw_phase_deg?: number | null
+          raw_r_bar?: number | null
+          recurrence_rate?: number | null
+          smooth_phase_deg?: number | null
+          smooth_r_bar?: number | null
+          structure_score?: number | null
+          t_dom?: number | null
+          t_dom_frac?: number | null
+          tau?: number | null
+          timestamp: number
+          trail?: Json | null
+          vm_horizon?: number | null
+          vm_kappa?: number | null
+          vm_lambda?: number | null
+          vm_mu?: number | null
+        }
+        Update: {
+          bar_count?: number | null
+          clock_position?: number | null
+          clock_velocity?: number | null
+          corr_dim_estimate?: number | null
+          embed_span?: number | null
+          embedding_dim?: number | null
+          goertzel_confidence?: number | null
+          goertzel_dom_k?: number | null
+          goertzel_spectrum?: Json | null
+          hmm_active_state?: number | null
+          hmm_alpha?: Json | null
+          hmm_dwell?: number | null
+          hmm_p_self?: number | null
+          id?: never
+          phase_window?: number | null
+          raw_cycle_position?: number | null
+          raw_dominant_k?: number | null
+          raw_frequencies?: Json | null
+          raw_mean_phase?: number | null
+          raw_phase_deg?: number | null
+          raw_r_bar?: number | null
+          recurrence_rate?: number | null
+          smooth_phase_deg?: number | null
+          smooth_r_bar?: number | null
+          structure_score?: number | null
+          t_dom?: number | null
+          t_dom_frac?: number | null
+          tau?: number | null
+          timestamp?: number
+          trail?: Json | null
+          vm_horizon?: number | null
+          vm_kappa?: number | null
+          vm_lambda?: number | null
+          vm_mu?: number | null
+        }
+        Relationships: []
+      }
       gp_states: {
         Row: {
           inputs: Json
@@ -63,6 +174,30 @@ export type Database = {
           outputs?: Json
           regime_id?: number
           updated_at?: string
+        }
+        Relationships: []
+      }
+      polar_rose: {
+        Row: {
+          id: number
+          kappa: number
+          phase: number
+          regime_id: number
+          timestamp: number
+        }
+        Insert: {
+          id?: never
+          kappa: number
+          phase: number
+          regime_id: number
+          timestamp: number
+        }
+        Update: {
+          id?: never
+          kappa?: number
+          phase?: number
+          regime_id?: number
+          timestamp?: number
         }
         Relationships: []
       }
@@ -224,6 +359,36 @@ export type Database = {
           regime_id?: number
           return_pct?: number
           reward?: number
+          timestamp?: number
+        }
+        Relationships: []
+      }
+      voxel_snapshots: {
+        Row: {
+          corr_dim_estimate: number | null
+          embedding_vecs: Json | null
+          id: number
+          recurrence_rate: number | null
+          recurrence_size: number | null
+          structure_score: number | null
+          timestamp: number
+        }
+        Insert: {
+          corr_dim_estimate?: number | null
+          embedding_vecs?: Json | null
+          id?: never
+          recurrence_rate?: number | null
+          recurrence_size?: number | null
+          structure_score?: number | null
+          timestamp: number
+        }
+        Update: {
+          corr_dim_estimate?: number | null
+          embedding_vecs?: Json | null
+          id?: never
+          recurrence_rate?: number | null
+          recurrence_size?: number | null
+          structure_score?: number | null
           timestamp?: number
         }
         Relationships: []
