@@ -8,3 +8,7 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
+      - key: VITE_SUPABASE_URL
+        value: "https://exlifmihtsikwyzokong.supabase.co"
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        value: "sb_publishable_NLALKqvvfAm4jPNDhEhuBw_2GHcJztu"

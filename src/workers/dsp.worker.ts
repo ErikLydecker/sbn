@@ -105,7 +105,7 @@ async function restorePersistedState() {
       }
     }
   } catch {
-    // IndexedDB unavailable or corrupt — start fresh
+    // Supabase unavailable or data corrupt — start fresh
   }
 }
 

@@ -1,0 +1,31 @@
+---
+description: Supabase database interactions — always use the Supabase MCP plugin for DDL, migrations, queries, and schema changes.
+globs:
+alwaysApply: true
+---
+
+# Supabase MCP Rule
+
+## Project Details
+
+- **Supabase Project ID:** `exlifmihtsikwyzokong`
+- **Supabase URL:** `https://exlifmihtsikwyzokong.supabase.co`
+- **Publishable Key:** `sb_publishable_NLALKqvvfAm4jPNDhEhuBw_2GHcJztu`
+
+## Rules
+
+1. **Always use the Supabase MCP plugin** (`plugin-supabase-supabase`) for all database interactions:
+   - DDL / schema changes → `apply_migration` tool
+   - Data queries and iteration → `execute_sql` tool
+   - Listing tables/schema inspection → `list_tables` tool
+   - Type generation → `generate_typescript_types` tool
+
+2. **Never modify the database directly** via raw SQL clients or psql. All schema changes must go through MCP to maintain migration history.
+
+3. **Follow the Supabase agent skill** (`.agents/skills/supabase/SKILL.md`) for best practices on RLS, security, and schema design.
+
+4. **Follow the Postgres best-practices skill** (`.agents/skills/supabase-postgres-best-practices/SKILL.md`) when writing or reviewing SQL queries and schema designs.
+
+5. **Client library:** Use `@supabase/supabase-js` via the shared client at `src/lib/supabase.ts`. Do not create additional Supabase client instances.
+
+6. **Environment variables:** Supabase credentials are stored in `.env` as `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. Never hardcode credentials in source files.
