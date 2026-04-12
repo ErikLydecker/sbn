@@ -1,0 +1,62 @@
+---
+title: "Trading configuration"
+description: "Parameters controlling the paper trading engine, Gaussian Process models, and UCB acquisition."
+---
+
+All trading parameters are defined in `src/config/trading.ts` as the `TRADING_CONFIG` constant.
+
+## General
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `initialEquity` | 10,000 | Starting paper equity (USD) |
+| `minEquity` | 1 | Equity floor before trading halts |
+| `maxTradeHistory` | 200 | Maximum closed trades stored |
+| `maxEquityCurvePoints` | 512 | Maximum equity curve data points |
+| `kappaThreshold` | 2.5 | Minimum von Mises kappa to allow entries |
+| `minHoldFraction` | 0.25 | Minimum hold as fraction of tDom |
+| `minHoldFloor` | 4 | Absolute minimum hold (bars) |
+| `minPhaseAdvance` | 0.20 | Minimum phase advance before exit |
+| `minReturnPctForPhaseExit` | 0.3 | Minimum return (%) for phase-based exit |
+| `lossPenaltyMultiplier` | 1.5 | Reward penalty multiplier for losses |
+
+## Trade parameters
+
+Six parameters are optimised per regime via Gaussian Process UCB. Each has bounded search space:
+
+| Parameter | Min | Max | Description |
+| --- | --- | --- | --- |
+| `entry_thr` | 0.002 | 0.025 | Entry signal threshold |
+| `size` | 0.05 | 0.30 | Position size (fraction of equity) |
+| `stop` | 0.005 | 0.05 | Stop-loss distance (fraction) |
+| `exit_ph` | 0.15 | 0.50 | Exit phase offset |
+| `reentry_bars` | 3 | 40 | Bars before re-entry allowed |
+| `min_confidence` | 0.3 | 0.85 | Minimum confidence for entry |
+
+## Gaussian Process
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `noise` | 0.01 | Observation noise variance |
+| `lengthscale` | 0.3 | RBF kernel lengthscale |
+| `maxGpObservations` | 30 | Max observations per GP model |
+
+## UCB acquisition
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `ucbCandidates` | 50 | Random candidates evaluated per acquisition |
+| `baseBeta` | 2.0 | Initial exploration-exploitation tradeoff |
+| `betaDecayRate` | 0.05 | Beta decay per observation |
+| `minBeta` | 0.5 | Floor on exploration parameter |
+
+## Reward function
+
+Composite reward weights applied to closed trades:
+
+| Component | Weight | Description |
+| --- | --- | --- |
+| `return` | 0.40 | Raw return percentage |
+| `risk` | 0.25 | Risk-adjusted return |
+| `efficiency` | 0.20 | Return per bar held |
+| `alignment` | 0.15 | Phase alignment quality |

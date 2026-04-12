@@ -1,0 +1,46 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "quill",
+  "name": "SBN",
+  "colors": {
+    "primary": "#7170ff",
+    "light": "#828fff",
+    "dark": "#5e6ad2"
+  },
+  "appearance": {
+    "default": "dark"
+  },
+  "logo": {
+    "dark": "/images/logo-dark.svg",
+    "light": "/images/logo-light.svg"
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting started",
+            "pages": ["index", "getting-started", "architecture"]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/dsp",
+              "configuration/trading",
+              "configuration/binance"
+            ]
+          },
+          {
+            "group": "Persistence",
+            "pages": ["persistence/supabase"]
+          }
+        ]
+      }
+    ]
+  },
+  "footerSocials": {
+    "github": "https://github.com/ErikLydecker/sbn"
+  }
+}

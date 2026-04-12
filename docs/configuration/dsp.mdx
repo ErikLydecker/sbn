@@ -1,0 +1,95 @@
+---
+title: "DSP configuration"
+description: "Parameters controlling the digital signal processing pipeline."
+---
+
+All DSP parameters are defined in `src/config/dsp.ts` as the `DSP_CONFIG` constant.
+
+## General
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `maxPricePoints` | 512 | Maximum raw price points held in memory |
+| `maxEventBars` | 2048 | Maximum event-clock bars |
+| `eventBarSize` | 1 | Events per bar |
+| `minBootstrapBars` | 128 | Bars required before trading activates |
+| `analysisIntervalMs` | 300 | Minimum interval between candle broadcasts (ms) |
+
+## Dominant period (`tDom`)
+
+Controls how the dominant market period is estimated and smoothed.
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `minPeriod` | 8 | Shortest detectable period |
+| `maxPeriod` | 200 | Longest detectable period |
+| `lookbackMultiplier` | 4 | Window = multiplier x current tDom |
+| `maxLookback` | 256 | Hard cap on analysis window |
+| `fallback` | 40 | Initial tDom before estimation stabilises |
+| `emaAlpha` | 0.15 | EMA smoothing on tDom updates |
+| `hmmRebuildPct` | 0.15 | Fractional tDom change that triggers HMM rebuild |
+
+## Goertzel bank
+
+Sliding Goertzel filters track the dominant frequency in real time.
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `lambda` | 0.985 | Exponential forgetting factor |
+| `refLength` | 256 | Reference window length |
+| `subBinInterp` | true | Sub-bin interpolation for precision |
+| `persistenceDecay` | 0.98 | Decay rate for frequency persistence score |
+| `persistenceThreshold` | 0.6 | Minimum persistence to keep a frequency |
+| `harmonicThreshold` | 0.35 | Threshold for harmonic rejection |
+| `softCorrectionThreshold` | 0.15 | Phase error triggering a soft correction |
+| `hardReseedThreshold` | 0.50 | Phase error triggering a full DFT reseed |
+
+## Embedding
+
+Time-delay embedding for attractor reconstruction.
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `maxDim` | 6 | Maximum embedding dimension |
+| `minDim` | 3 | Minimum embedding dimension |
+| `kurtosisHighThreshold` | 8 | Kurtosis above this reduces dimension |
+| `kurtosisMedThreshold` | 5 | Medium kurtosis threshold |
+
+## Von Mises
+
+Circular concentration estimation for phase coherence.
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `horizonFraction` | 0.55 | Fraction of cycle used for concentration estimation |
+| `maxKappa` | 20 | Cap on concentration parameter |
+
+## HMM
+
+Four-state Hidden Markov Model for regime classification.
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `stateCount` | 4 | Number of HMM states |
+| `stateNames` | RISING, PEAK, FALLING, TROUGH | Regime labels |
+| `minDwell` | 2 | Minimum bars in a state before transition |
+| `initialAlpha` | [0.25, 0.25, 0.25, 0.25] | Uniform prior over states |
+
+## Smooth clock
+
+Damped oscillator model for smooth phase tracking.
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `dampingFactor` | 0.93 | Velocity damping per tick |
+| `maxVelocity` | 0.035 | Phase velocity cap (radians/tick) |
+| `trailLengthMultiplier` | 1.0 | Trail length as a multiple of tDom |
+
+## Wavelet denoising
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `enabled` | true | Whether to apply denoising |
+| `levels` | 3 | Wavelet decomposition levels |
+| `thresholdMultiplier` | 1.0 | Threshold scaling factor |
+| `thresholdLevels` | 2 | Number of levels to threshold |

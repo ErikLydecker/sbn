@@ -1,0 +1,57 @@
+---
+title: "Getting started"
+description: "Set up and run the SBN trading dashboard locally."
+---
+
+## Prerequisites
+
+- Node.js 20+
+- A Supabase project with the SBN schema applied
+
+## Install
+
+Clone the repository and install dependencies:
+
+```bash
+git clone https://github.com/ErikLydecker/sbn.git
+cd sbn
+npm install
+```
+
+## Environment variables
+
+Create a `.env` file in the project root:
+
+```bash
+VITE_SUPABASE_URL=https://<your-project>.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+```
+
+Vite exposes any variable prefixed with `VITE_` to the client bundle at build time.
+
+## Development server
+
+```bash
+npm run dev
+```
+
+The dev server starts at `http://localhost:5173` with Vite proxies configured for Binance WebSocket and REST endpoints.
+
+## Build and preview
+
+```bash
+npm run build    # TypeScript check + Vite production build
+npm run preview  # Serve the built output locally
+```
+
+## Available scripts
+
+| Script | Purpose |
+| --- | --- |
+| `dev` | Start Vite dev server |
+| `build` | Type-check and build for production |
+| `preview` | Preview the production build |
+| `lint` | Run ESLint |
+| `test` | Run Vitest |
+| `test:watch` | Run Vitest in watch mode |
+| `typecheck` | Type-check without emitting |

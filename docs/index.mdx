@@ -1,0 +1,36 @@
+---
+title: "Introduction"
+description: "SBN (Signal by Noise) is a real-time cycle-state trading dashboard built on DSP analysis of BTC/USDT market data."
+---
+
+SBN is a client-side trading dashboard that performs real-time digital signal processing on cryptocurrency market data from Binance. It detects dominant market cycles, estimates phase states via a Hidden Markov Model, and executes paper trades using a Gaussian Process-driven UCB acquisition strategy.
+
+## Core capabilities
+
+<Columns>
+  <Card title="DSP pipeline" icon="wave-pulse">
+    Wavelet denoising, sliding-window DFT, Goertzel bank, time-delay embedding, and von Mises concentration estimation running in a Web Worker.
+  </Card>
+  <Card title="Cycle-state trading" icon="chart-line">
+    HMM-based regime classification (RISING, PEAK, FALLING, TROUGH) with per-regime Gaussian Process models optimised via UCB acquisition.
+  </Card>
+  <Card title="Real-time Binance feed" icon="bolt">
+    Dual-endpoint WebSocket connection to Binance trade streams with automatic failover, health monitoring, and historical kline backfill.
+  </Card>
+  <Card title="Persistent state" icon="database">
+    Portfolio, GP models, smooth clock state, and coherence history persisted to Supabase Postgres.
+  </Card>
+</Columns>
+
+## Tech stack
+
+| Layer | Technology |
+| --- | --- |
+| Framework | React 19 + Vite 8 |
+| Routing | TanStack Router (file-based) |
+| State | Zustand + TanStack Query |
+| Styling | Tailwind CSS v4 + Radix UI |
+| Charts | Lightweight Charts + custom canvas |
+| Compute | Web Worker (DSP pipeline) |
+| Persistence | Supabase (Postgres) |
+| Deploy | Render (static site) |

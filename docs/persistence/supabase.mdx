@@ -1,0 +1,112 @@
+---
+title: "Supabase persistence"
+description: "Database schema and persistence layer for trading state and coherence history."
+---
+
+SBN uses Supabase Postgres for persisting trading state across sessions. All database operations go through `src/services/persistence/db.ts`.
+
+## Schema
+
+```mermaid
+erDiagram
+    gp_states {
+        int regime_id PK
+        jsonb inputs
+        jsonb outputs
+        jsonb kernel_inverse
+        timestamptz updated_at
+    }
+    portfolio {
+        text id PK
+        int version
+        float8 equity
+        float8 initial_equity
+        jsonb equity_curve
+        jsonb cooldowns
+        jsonb returns
+        int bar_count
+        timestamptz saved_at
+    }
+    trades {
+        bigint id PK
+        int regime_id
+        smallint direction
+        float8 pnl
+        float8 return_pct
+        float8 reward
+        int bars
+        text reason
+        float8 exit_price
+        bigint timestamp
+        jsonb param_vector
+        float8 entry_kappa
+        float8 entry_r_bar
+    }
+    smooth_state {
+        text id PK
+        float8 vm_mu
+        float8 vm_kappa
+        jsonb alpha
+        float8 clock_pos
+        float8 vel
+        jsonb trail
+        float8 tau
+        int dim
+        float8 t_dom
+        jsonb hmm_a
+        float8 hmm_tdom_a
+        float8 last_tdom
+        jsonb phase_kappa_history
+        int last_regime_id
+    }
+    coherence_history {
+        bigint id PK
+        bigint timestamp
+        float8 r_bar
+        float8 kappa
+        float8 recurrence_rate
+        float8 structure_score
+        float8 t_dom
+    }
+    portfolio ||--o{ trades : "has many"
+```
+
+## Tables
+
+### `gp_states`
+
+Stores the state of 8 Gaussian Process models (one per regime). Each row contains the training inputs, outputs, and cached kernel inverse matrix.
+
+Written every 5 seconds by the DSP worker via `saveGpStates()`.
+
+### `portfolio`
+
+Singleton row (`id = 'current'`) holding the current portfolio snapshot: equity, initial equity, equity curve, per-regime cooldowns, and return history.
+
+### `trades`
+
+Normalised closed trade records. Each trade records the regime, direction, P&L, exit reason, and the parameter vector that produced it. Indexed on `regime_id` and `timestamp`.
+
+### `smooth_state`
+
+Singleton row for the DSP smooth clock and HMM state: von Mises parameters, clock position/velocity, embedding trail, dominant period, HMM transition matrix, and phase-kappa history.
+
+### `coherence_history`
+
+Time-series of coherence metrics (rBar, kappa, recurrence rate, structure score, tDom). Capped at 2,000 rows with automatic pruning of the oldest entries. Indexed on `timestamp`.
+
+## Write patterns
+
+| Source | Tables | Frequency | Method |
+| --- | --- | --- | --- |
+| DSP worker | `gp_states`, `portfolio`, `trades`, `smooth_state` | Every 5s | Fire-and-forget upsert |
+| Main thread | `coherence_history` | Every 10s | Batch insert + prune |
+
+All writes are fire-and-forget (errors caught silently) so network latency does not block the worker or main thread.
+
+## Environment variables
+
+| Variable | Description |
+| --- | --- |
+| `VITE_SUPABASE_URL` | Supabase project URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable API key |

@@ -1,0 +1,39 @@
+---
+description: Mintlify documentation -- use the Mintlify MCP server and skills when working with docs.
+globs:
+  - docs/**
+alwaysApply: false
+---
+
+# Mintlify Documentation Rule
+
+## MCP Server
+
+- **Mintlify MCP server** is configured in Cursor at `https://sbn.mintlify.app/mcp`
+- Use the MCP `search` tool to find existing documentation content before creating or editing pages.
+- Use the MCP `get_page` tool to retrieve full page content by path.
+
+## Skills
+
+Follow the installed Mintlify skills (`.agents/skills/mintlify/`, `.agents/skills/mintlify-docs/`, `.agents/skills/mintlify-api/`) for best practices when writing or editing documentation.
+
+## Docs Structure
+
+- All documentation lives in `docs/` at the repository root.
+- Site configuration is in `docs/docs.json`.
+- Pages are `.mdx` files with YAML frontmatter (`title` and `description` required).
+- New pages must be added to the `navigation` in `docs/docs.json` or they won't appear in the sidebar.
+- Internal links use root-relative paths without file extensions: `/getting-started`.
+- Images go in `docs/images/`.
+
+## Auto-deploy
+
+Mintlify auto-deploys when changes are pushed to the connected GitHub repository (`ErikLydecker/sbn`). No manual deployment steps are needed.
+
+## Conventions
+
+- Second-person voice ("you").
+- Sentence case for headings.
+- All code blocks must have language tags.
+- No marketing language or filler phrases.
+- Keep docs in sync with code -- when source code changes (configs, schemas, APIs), update the corresponding docs pages.

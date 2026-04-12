@@ -1,0 +1,47 @@
+---
+title: "Binance configuration"
+description: "WebSocket connection, failover, and market data settings."
+---
+
+All Binance connection parameters are defined in `src/config/binance.ts` as the `BINANCE_CONFIG` constant.
+
+## WebSocket
+
+SBN maintains a dual-endpoint WebSocket connection to Binance trade streams with automatic failover.
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `primary` | `/ws-binance/btcusdt@trade` | Primary WebSocket endpoint (proxied via Vite in dev) |
+| `fallback` | `/ws-binance-alt/btcusdt@trade` | Fallback endpoint via alternative Binance data stream |
+| `connectTimeoutMs` | 4,000 | Time to wait for connection before switching endpoints |
+| `staleThresholdMs` | 10,000 | Time without data before considering connection stale |
+| `heartbeatIntervalMs` | 5,000 | Health check interval |
+
+## Retry
+
+Reconnection uses exponential backoff with jitter.
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `baseDelayMs` | 1,000 | Initial retry delay |
+| `maxDelayMs` | 30,000 | Maximum retry delay |
+| `jitterMs` | 500 | Random jitter added to delay |
+
+## Market
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `symbol` | BTCUSDT | Trading pair symbol |
+| `displayPair` | BTC / USDT | Human-readable pair name |
+
+## Vite dev proxies
+
+During development, Vite proxies WebSocket and REST requests to Binance to avoid CORS restrictions. These are configured in `vite.config.ts`:
+
+| Local path | Target |
+| --- | --- |
+| `/ws-binance` | `wss://stream.binance.com:9443/ws` |
+| `/ws-binance-alt` | `wss://data-stream.binance.vision/ws` |
+| `/api-binance` | `https://api.binance.com` |
+
+In production (static deploy on Render), the app connects directly to Binance endpoints.
