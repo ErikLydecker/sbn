@@ -1,6 +1,5 @@
 import { EventClockResampler } from '@/services/event-clock/resampler'
 import { OhlcAggregator } from '@/services/ohlc/aggregator'
-import type { Timeframe } from '@/schemas/settings'
 import { analyseRaw, analyseSmooth, createInitialSmoothState, computeTransitionMatrix } from '@/core/dsp/pipeline'
 import type { SmoothClockState } from '@/core/dsp/pipeline'
 import { portfolioTick, createPortfolioState, restorePortfolioState } from '@/core/trading/engine'

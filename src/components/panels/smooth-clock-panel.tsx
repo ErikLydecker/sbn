@@ -13,7 +13,6 @@ interface SmoothClockPanelProps {
 }
 
 const STATE_NAMES = ['Rising', 'Peak', 'Falling', 'Trough'] as const
-const STATE_COLORS = ['text-cycle-rising', 'text-cycle-peak', 'text-cycle-falling', 'text-cycle-trough'] as const
 
 export const SmoothClockPanel = memo(function SmoothClockPanel({ smooth }: SmoothClockPanelProps) {
   const activeIdx = smooth?.hmmActiveState ?? -1

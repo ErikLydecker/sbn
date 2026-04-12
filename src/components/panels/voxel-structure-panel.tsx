@@ -33,18 +33,18 @@ interface VoxelMetrics {
 function computeMetrics(pts: number[][]): VoxelMetrics | null {
   if (pts.length < 4) return null
 
-  let minV = [Infinity, Infinity, Infinity]
-  let maxV = [-Infinity, -Infinity, -Infinity]
+  const minV: [number, number, number] = [Infinity, Infinity, Infinity]
+  const maxV: [number, number, number] = [-Infinity, -Infinity, -Infinity]
   for (const p of pts) {
     for (let d = 0; d < 3; d++) {
       if (p[d]! < minV[d]!) minV[d] = p[d]!
       if (p[d]! > maxV[d]!) maxV[d] = p[d]!
     }
   }
-  const range = [
-    maxV[0]! - minV[0]! || 1,
-    maxV[1]! - minV[1]! || 1,
-    maxV[2]! - minV[2]! || 1,
+  const range: [number, number, number] = [
+    maxV[0] - minV[0] || 1,
+    maxV[1] - minV[1] || 1,
+    maxV[2] - minV[2] || 1,
   ]
 
   const grid = new Float32Array(GRID * GRID * GRID)
@@ -52,7 +52,8 @@ function computeMetrics(pts: number[][]): VoxelMetrics | null {
     const ix = Math.min(GRID - 1, Math.floor(((p[0]! - minV[0]!) / range[0]!) * GRID))
     const iy = Math.min(GRID - 1, Math.floor(((p[1]! - minV[1]!) / range[1]!) * GRID))
     const iz = Math.min(GRID - 1, Math.floor(((p[2]! - minV[2]!) / range[2]!) * GRID))
-    grid[ix * GRID * GRID + iy * GRID + iz] += 1
+    const gi = ix * GRID * GRID + iy * GRID + iz
+    grid[gi] = grid[gi]! + 1
   }
 
   let maxDensity = 0
@@ -69,7 +70,7 @@ function computeMetrics(pts: number[][]): VoxelMetrics | null {
   const occupancy = occupied / totalVoxels
   const meanDensity = occupied > 0 ? sumDensity / occupied : 0
 
-  const cx = [0, 0, 0]
+  const cx: [number, number, number] = [0, 0, 0]
   let totalW = 0
   for (let ix = 0; ix < GRID; ix++) {
     for (let iy = 0; iy < GRID; iy++) {
@@ -86,7 +87,7 @@ function computeMetrics(pts: number[][]): VoxelMetrics | null {
   if (totalW > 0) { cx[0] /= totalW; cx[1] /= totalW; cx[2] /= totalW }
   const centroid: [number, number, number] = [cx[0], cx[1], cx[2]]
 
-  const variance = [0, 0, 0]
+  const variance: [number, number, number] = [0, 0, 0]
   for (let ix = 0; ix < GRID; ix++) {
     for (let iy = 0; iy < GRID; iy++) {
       for (let iz = 0; iz < GRID; iz++) {
@@ -110,11 +111,11 @@ function computeMetrics(pts: number[][]): VoxelMetrics | null {
 
   const gyrationRadius = Math.sqrt(variance[0] + variance[1] + variance[2])
 
-  const sorted = [...variance].sort((a, b) => b - a)
+  const sortedVar = [variance[0], variance[1], variance[2]].sort((a, b) => b - a)
   const principalExtents: [number, number, number] = [
-    Math.sqrt(sorted[0]),
-    Math.sqrt(sorted[1]),
-    Math.sqrt(sorted[2]),
+    Math.sqrt(sortedVar[0]!),
+    Math.sqrt(sortedVar[1]!),
+    Math.sqrt(sortedVar[2]!),
   ]
 
   const NUM_SHELLS = 6
@@ -131,7 +132,7 @@ function computeMetrics(pts: number[][]): VoxelMetrics | null {
           ((iz + 0.5) / GRID - cx[2]) ** 2,
         )
         const shell = Math.min(NUM_SHELLS - 1, Math.floor((r / maxR) * NUM_SHELLS))
-        shellCounts[shell] += d
+        shellCounts[shell] = shellCounts[shell]! + d
       }
     }
   }
@@ -142,32 +143,33 @@ function computeMetrics(pts: number[][]): VoxelMetrics | null {
     fraction: c / shellTotal,
   }))
 
-  const innerShellFraction = radialShells.length > 0 ? radialShells[0].fraction : 0
-  const outerShellFraction = radialShells.length > 0 ? radialShells[radialShells.length - 1].fraction : 0
+  const innerShellFraction = radialShells.length > 0 ? radialShells[0]!.fraction : 0
+  const outerShellFraction = radialShells.length > 0 ? radialShells[radialShells.length - 1]!.fraction : 0
   const hollowness = occupied > 0
     ? Math.max(0, 1 - innerShellFraction / (outerShellFraction || 0.001))
     : 0
 
-  const axisPos = [0, 0, 0]
-  const axisNeg = [0, 0, 0]
+  const axisPos: [number, number, number] = [0, 0, 0]
+  const axisNeg: [number, number, number] = [0, 0, 0]
   for (let ix = 0; ix < GRID; ix++) {
     for (let iy = 0; iy < GRID; iy++) {
       for (let iz = 0; iz < GRID; iz++) {
         const d = grid[ix * GRID * GRID + iy * GRID + iz]!
         if (d < 1) continue
-        const coords = [(ix + 0.5) / GRID, (iy + 0.5) / GRID, (iz + 0.5) / GRID]
-        for (let a = 0; a < 3; a++) {
-          if (coords[a] >= cx[a]) axisPos[a] += d
-          else axisNeg[a] += d
-        }
+        const px = (ix + 0.5) / GRID
+        const py = (iy + 0.5) / GRID
+        const pz = (iz + 0.5) / GRID
+        px >= cx[0] ? (axisPos[0] += d) : (axisNeg[0] += d)
+        py >= cx[1] ? (axisPos[1] += d) : (axisNeg[1] += d)
+        pz >= cx[2] ? (axisPos[2] += d) : (axisNeg[2] += d)
       }
     }
   }
-  const axisAsymmetry: [number, number, number] = [0, 0, 0]
-  for (let a = 0; a < 3; a++) {
-    const total = axisPos[a] + axisNeg[a]
-    axisAsymmetry[a] = total > 0 ? Math.abs(axisPos[a] - axisNeg[a]) / total : 0
-  }
+  const axisAsymmetry: [number, number, number] = [
+    (axisPos[0] + axisNeg[0]) > 0 ? Math.abs(axisPos[0] - axisNeg[0]) / (axisPos[0] + axisNeg[0]) : 0,
+    (axisPos[1] + axisNeg[1]) > 0 ? Math.abs(axisPos[1] - axisNeg[1]) / (axisPos[1] + axisNeg[1]) : 0,
+    (axisPos[2] + axisNeg[2]) > 0 ? Math.abs(axisPos[2] - axisNeg[2]) / (axisPos[2] + axisNeg[2]) : 0,
+  ]
 
   let densityEntropy = 0
   for (let i = 0; i < grid.length; i++) {

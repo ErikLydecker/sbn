@@ -276,15 +276,11 @@ interface RegimeGpCardProps {
 const RegimeGpCard = memo(function RegimeGpCard({
   regimeId,
   gp,
-  trades,
+  trades: _trades,
   isActive,
   cooldown,
 }: RegimeGpCardProps) {
   const regime = REGIME_DEFINITIONS[regimeId]!
-  const regimeTrades = useMemo(
-    () => trades.filter((t) => t.regimeId === regimeId),
-    [trades, regimeId],
-  )
   const obsCount = gp.inputs.length
   const gpFillPct = Math.min((obsCount / TRADING_CONFIG.maxGpObservations) * 100, 100)
 

@@ -259,7 +259,7 @@ function drawTooltip(
   for (let i = 0; i < lines.length; i++) {
     const color = i === 0 ? '#f7f8f8' : i === 2 ? '#7170ff' : '#8a8f98'
     ctx.fillStyle = color
-    ctx.fillText(lines[i], tx + padding, ty + padding + (i + 1) * lineHeight - 4)
+    ctx.fillText(lines[i]!, tx + padding, ty + padding + (i + 1) * lineHeight - 4)
   }
 }
 

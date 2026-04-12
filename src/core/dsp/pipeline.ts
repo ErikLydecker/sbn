@@ -291,7 +291,7 @@ function logReturns(prices: number[]): number[] {
 }
 
 function estimateTdomCausal(
-  rawBars: number[],
+  _rawBars: number[],
   cleanBars: number[],
   state: SmoothClockState,
   gCfg: typeof DSP_CONFIG.goertzel,

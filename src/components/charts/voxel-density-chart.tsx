@@ -50,10 +50,10 @@ function catmullRom(
   for (let i = 0; i < 3; i++) {
     out[i] =
       0.5 * (
-        (2 * p1[i]) +
-        (-p0[i] + p2[i]) * t +
-        (2 * p0[i] - 5 * p1[i] + 4 * p2[i] - p3[i]) * t2 +
-        (-p0[i] + 3 * p1[i] - 3 * p2[i] + p3[i]) * t3
+        (2 * p1[i]!) +
+        (-p0[i]! + p2[i]!) * t +
+        (2 * p0[i]! - 5 * p1[i]! + 4 * p2[i]! - p3[i]!) * t2 +
+        (-p0[i]! + 3 * p1[i]! - 3 * p2[i]! + p3[i]!) * t3
       )
   }
   return out
@@ -89,10 +89,10 @@ function getDronePosition(drone: DroneState): [number, number, number] {
   const i3 = (idx + 2) % n
 
   return catmullRom(
-    drone.waypoints[i0],
-    drone.waypoints[i1],
-    drone.waypoints[i2],
-    drone.waypoints[i3],
+    drone.waypoints[i0]!,
+    drone.waypoints[i1]!,
+    drone.waypoints[i2]!,
+    drone.waypoints[i3]!,
     frac,
   )
 }
@@ -246,7 +246,7 @@ export const VoxelDensityChart = memo(forwardRef<VoxelDensityChartHandle, VoxelD
       let closest: RenderedVoxel | null = null
       let closestDist = Infinity
       for (let i = renderedRef.current.length - 1; i >= 0; i--) {
-        const rv = renderedRef.current[i]
+        const rv = renderedRef.current[i]!
         const dx = mx - rv.sx
         const dy = my - rv.sy
         const dist = dx * dx + dy * dy
