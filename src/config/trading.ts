@@ -1,0 +1,40 @@
+export const TRADING_CONFIG = {
+  initialEquity: 10_000,
+  minEquity: 1,
+  maxGpObservations: 30,
+  ucbCandidates: 50,
+  maxTradeHistory: 200,
+  maxEquityCurvePoints: 512,
+  kappaThreshold: 2.5,
+  minHoldFraction: 0.25,
+  minHoldFloor: 4,
+  minPhaseAdvance: 0.20,
+  minReturnPctForPhaseExit: 0.3,
+  paramBounds: [
+    [0.002, 0.025],
+    [0.05, 0.30],
+    [0.005, 0.05],
+    [0.15, 0.50],
+    [3, 40],
+    [0.3, 0.85],
+  ] as const,
+  paramNames: ['entry_thr', 'size', 'stop', 'exit_ph', 'reentry_bars', 'min_confidence'] as const,
+  gp: {
+    noise: 0.01,
+    lengthscale: 0.3,
+  },
+  ucb: {
+    baseBeta: 2.0,
+    betaDecayRate: 0.05,
+    minBeta: 0.5,
+  },
+  rewardWeights: {
+    return: 0.40,
+    risk: 0.25,
+    efficiency: 0.20,
+    alignment: 0.15,
+  },
+  lossPenaltyMultiplier: 1.5,
+} as const
+
+export type ParamName = (typeof TRADING_CONFIG.paramNames)[number]

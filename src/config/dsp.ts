@@ -1,0 +1,75 @@
+export const DSP_CONFIG = {
+  maxPricePoints: 512,
+  maxEventBars: 2048,
+  eventBarSize: 1,
+  minBootstrapBars: 128,
+  tDom: {
+    minPeriod: 8,
+    maxPeriod: 200,
+    lookbackMultiplier: 4,
+    maxLookback: 256,
+    fallback: 40,
+    emaAlpha: 0.15,
+    hmmRebuildPct: 0.15,
+  },
+  tau: {
+    minTau: 2,
+    amiBins: null as number | null,
+  },
+  embedding: {
+    maxDim: 6,
+    minDim: 3,
+    kurtosisHighThreshold: 8,
+    kurtosisMedThreshold: 5,
+  },
+  vonMises: {
+    horizonFraction: 0.55,
+    maxKappa: 20,
+  },
+  hmm: {
+    stateCount: 4,
+    stateNames: ['RISING', 'PEAK', 'FALLING', 'TROUGH'] as const,
+    statePhaseCentres: [0, Math.PI * 0.5, Math.PI, Math.PI * 1.5] as const,
+    minDwell: 2,
+    initialAlpha: [0.25, 0.25, 0.25, 0.25] as const,
+  },
+  smoothClock: {
+    dampingFactor: 0.93,
+    maxVelocity: 0.035,
+    trailLengthMultiplier: 1.0,
+  },
+  goertzel: {
+    lambda: 0.985,
+    refLength: 256,
+    subBinInterp: true,
+    useGoertzel: true,
+    sanityIntervalMultiplier: 1.0,
+    dftReseedThreshold: 0.25,
+
+    persistenceDecay: 0.98,
+    persistenceThreshold: 0.6,
+    persistenceWeight: 0.3,
+
+    harmonicThreshold: 0.35,
+
+    softCorrectionThreshold: 0.15,
+    partialDecayThreshold: 0.30,
+    hardReseedThreshold: 0.50,
+    softBlendAlpha: 0.4,
+    partialDecayFactor: 0.5,
+    maxConsecutiveSoftCorrections: 3,
+  },
+  denoise: {
+    enabled: true,
+    levels: 3,
+    thresholdMultiplier: 1.0,
+    thresholdLevels: 2,
+  },
+  raw: {
+    defaultWindow: 128,
+    minWindow: 32,
+    maxWindow: 256,
+    maxDftK: 48,
+  },
+  analysisIntervalMs: 300,
+} as const

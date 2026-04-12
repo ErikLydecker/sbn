@@ -1,0 +1,221 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Monochrome + single accent design system.
+ * Dark-mode-native. Luminance stacking for elevation.
+ * Google Sans Code as the sole typeface.
+ * Weight 510 as the signature emphasis weight.
+ * Semi-transparent white borders, translucent surfaces.
+ */
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-cycle-rising: var(--cycle-rising);
+  --color-cycle-peak: var(--cycle-peak);
+  --color-cycle-falling: var(--cycle-falling);
+  --color-cycle-trough: var(--cycle-trough);
+  --color-cycle-coherent: var(--cycle-coherent);
+  --color-cycle-incoherent: var(--cycle-incoherent);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-xs: 2px;
+
+  --font-sans: "Google Sans Code", monospace;
+  --font-mono: "Google Sans Code", monospace;
+
+  --animate-accordion-down: accordion-down 150ms ease-out;
+  --animate-accordion-up: accordion-up 150ms ease-out;
+}
+
+@keyframes accordion-down {
+  from { height: 0; }
+  to { height: var(--radix-accordion-content-height); }
+}
+
+@keyframes accordion-up {
+  from { height: var(--radix-accordion-content-height); }
+  to { height: 0; }
+}
+
+/* ── Dark theme (default) — Linear.app exact tokens ── */
+:root {
+  --radius: 8px;
+
+  --background: #08090a;
+  --foreground: #f7f8f8;
+
+  --card: rgba(255,255,255,0.02);
+  --card-foreground: #f7f8f8;
+
+  --popover: #191a1b;
+  --popover-foreground: #f7f8f8;
+
+  --primary: #5e6ad2;
+  --primary-foreground: #ffffff;
+
+  --secondary: rgba(255,255,255,0.04);
+  --secondary-foreground: #d0d6e0;
+
+  --muted: #0f1011;
+  --muted-foreground: #8a8f98;
+
+  --accent: #7170ff;
+  --accent-foreground: #f7f8f8;
+
+  --destructive: #f7f8f8;
+  --destructive-foreground: #08090a;
+
+  --border: rgba(255,255,255,0.08);
+  --input: rgba(255,255,255,0.08);
+  --ring: #7170ff;
+
+  /* Cycle state semantic tokens — monochrome + single accent */
+  --cycle-rising: #7170ff;
+  --cycle-peak: #d0d6e0;
+  --cycle-falling: #8a8f98;
+  --cycle-trough: #62666d;
+  --cycle-coherent: #7170ff;
+  --cycle-incoherent: #62666d;
+
+  /* Chart palette — accent + grayscale */
+  --chart-1: #7170ff;
+  --chart-2: #d0d6e0;
+  --chart-3: #8a8f98;
+  --chart-4: #62666d;
+  --chart-5: #f7f8f8;
+
+  /* Linear-specific surface elevation tokens */
+  --surface-0: #08090a;
+  --surface-1: #0f1011;
+  --surface-2: #191a1b;
+  --surface-3: #28282c;
+  --surface-translucent-1: rgba(255,255,255,0.02);
+  --surface-translucent-2: rgba(255,255,255,0.04);
+  --surface-translucent-3: rgba(255,255,255,0.05);
+
+  /* Linear border tokens */
+  --border-subtle: rgba(255,255,255,0.05);
+  --border-standard: rgba(255,255,255,0.08);
+  --border-solid-1: #23252a;
+  --border-solid-2: #34343a;
+
+  /* Linear text tokens */
+  --text-primary: #f7f8f8;
+  --text-secondary: #d0d6e0;
+  --text-tertiary: #8a8f98;
+  --text-quaternary: #62666d;
+
+  /* Overlay */
+  --overlay: rgba(0,0,0,0.85);
+}
+
+/* ── Light theme ── */
+.light {
+  --background: #f7f8f8;
+  --foreground: #08090a;
+
+  --card: #ffffff;
+  --card-foreground: #08090a;
+
+  --popover: #ffffff;
+  --popover-foreground: #08090a;
+
+  --primary: #5e6ad2;
+  --primary-foreground: #ffffff;
+
+  --secondary: #f3f4f5;
+  --secondary-foreground: #28282c;
+
+  --muted: #f3f4f5;
+  --muted-foreground: #62666d;
+
+  --accent: #5e6ad2;
+  --accent-foreground: #ffffff;
+
+  --destructive: #28282c;
+  --destructive-foreground: #f7f8f8;
+
+  --border: #d0d6e0;
+  --input: #e6e6e6;
+  --ring: #5e6ad2;
+
+  --cycle-rising: #5e6ad2;
+  --cycle-peak: #62666d;
+  --cycle-falling: #8a8f98;
+  --cycle-trough: #b0b4bc;
+  --cycle-coherent: #5e6ad2;
+  --cycle-incoherent: #b0b4bc;
+
+  --chart-1: #5e6ad2;
+  --chart-2: #28282c;
+  --chart-3: #62666d;
+  --chart-4: #8a8f98;
+  --chart-5: #b0b4bc;
+
+  --surface-0: #f7f8f8;
+  --surface-1: #f3f4f5;
+  --surface-2: #ffffff;
+  --surface-3: #f5f6f7;
+  --surface-translucent-1: rgba(0,0,0,0.02);
+  --surface-translucent-2: rgba(0,0,0,0.04);
+  --surface-translucent-3: rgba(0,0,0,0.06);
+
+  --border-subtle: rgba(0,0,0,0.06);
+  --border-standard: #e6e6e6;
+  --border-solid-1: #d0d6e0;
+  --border-solid-2: #e6e6e6;
+
+  --text-primary: #08090a;
+  --text-secondary: #28282c;
+  --text-tertiary: #62666d;
+  --text-quaternary: #8a8f98;
+
+  --overlay: rgba(0,0,0,0.5);
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  font-feature-settings: normal;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
