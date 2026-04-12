@@ -67,6 +67,7 @@ const wss = new WebSocketServer({ noServer: true })
 
 server.on('upgrade', (req, socket, head) => {
   const url = req.url || ''
+  console.log('[ws] upgrade request:', url)
 
   let stream = ''
   if (url.startsWith('/ws-binance/')) {
@@ -76,26 +77,45 @@ server.on('upgrade', (req, socket, head) => {
   }
 
   if (!stream) {
+    console.log('[ws] no stream match, destroying socket')
     socket.destroy()
     return
   }
 
   wss.handleUpgrade(req, socket, head, (clientWs) => {
-    const upstream = new WebSocket(`${BINANCE_WS}/${stream}`)
+    const target = `${BINANCE_WS}/${stream}`
+    console.log('[ws] client connected, opening upstream:', target)
+    const upstream = new WebSocket(target)
+    let msgCount = 0
 
     upstream.on('open', () => {
+      console.log('[ws] upstream open')
       clientWs.on('message', (data) => {
         if (upstream.readyState === WebSocket.OPEN) upstream.send(data)
       })
       upstream.on('message', (data) => {
+        msgCount++
+        if (msgCount === 1) console.log('[ws] first upstream message received')
         if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data)
       })
     })
 
-    upstream.on('error', () => clientWs.close())
-    upstream.on('close', () => clientWs.close())
-    clientWs.on('error', () => upstream.close())
-    clientWs.on('close', () => upstream.close())
+    upstream.on('error', (err) => {
+      console.error('[ws] upstream error:', err.message)
+      clientWs.close()
+    })
+    upstream.on('close', (code) => {
+      console.log('[ws] upstream closed, code:', code, 'after', msgCount, 'msgs')
+      clientWs.close()
+    })
+    clientWs.on('error', (err) => {
+      console.error('[ws] client error:', err.message)
+      upstream.close()
+    })
+    clientWs.on('close', (code) => {
+      console.log('[ws] client closed, code:', code)
+      upstream.close()
+    })
   })
 })
 
