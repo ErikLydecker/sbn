@@ -16,11 +16,19 @@ export interface GeometryWorkerData {
   transitions: number[]
 }
 
+export interface PriceTickData {
+  timestamp: number
+  price: number
+  logReturn: number
+  denoisedReturn: number
+}
+
 export type WorkerOutbound =
   | { type: 'raw'; data: RawAnalysis }
   | { type: 'smooth'; data: SmoothAnalysis }
   | { type: 'portfolio'; data: PortfolioWorkerData }
   | { type: 'geometry'; data: GeometryWorkerData }
+  | { type: 'priceTick'; data: PriceTickData }
   | { type: 'barCount'; count: number }
   | { type: 'candles'; bars: OhlcBar[] }
 

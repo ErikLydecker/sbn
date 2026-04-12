@@ -128,6 +128,20 @@ function runAnalysis(price: number) {
     smoothState = smoothResult.state
     post({ type: 'smooth', data: smoothResult.result })
 
+    if (!smoothResult.result.isBootstrapping) {
+      const pr = smoothResult.result.pipelineReturns
+      const pd = smoothResult.result.pipelineDenoised
+      if (pr && pr.length >= 2 && pd && pd.length >= 2) {
+        const prev = pr[pr.length - 2]!
+        const cur = pr[pr.length - 1]!
+        const logRet = prev > 0 ? Math.log(cur / prev) : 0
+        const prevD = pd[pd.length - 2]!
+        const curD = pd[pd.length - 1]!
+        const denoisedRet = prevD > 0 ? Math.log(curD / prevD) : 0
+        post({ type: 'priceTick', data: { timestamp: Date.now(), price, logReturn: logRet, denoisedReturn: denoisedRet } })
+      }
+    }
+
     if (smoothState.phaseKappaHistory.length > 0) {
       post({
         type: 'geometry',

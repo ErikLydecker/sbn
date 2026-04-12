@@ -252,6 +252,45 @@ export async function appendCoherencePoints(points: CoherencePoint[]): Promise<v
   }
 }
 
+export interface PriceTick {
+  timestamp: number
+  price: number
+  logReturn: number
+  denoisedReturn: number
+}
+
+const MAX_PRICE_TICKS = 10_000
+
+export async function appendPriceTicks(ticks: PriceTick[]): Promise<void> {
+  const rows = ticks.map((t) => ({
+    timestamp: t.timestamp,
+    price: t.price,
+    log_return: t.logReturn,
+    denoised_return: t.denoisedReturn,
+  }))
+  const { error } = await supabase.from('price_series').insert(rows)
+  if (error) throw error
+
+  const { count, error: countError } = await supabase
+    .from('price_series')
+    .select('*', { count: 'exact', head: true })
+  if (countError) throw countError
+
+  if (count && count > MAX_PRICE_TICKS * 1.2) {
+    const excess = count - MAX_PRICE_TICKS
+    const { data: oldest, error: oldestError } = await supabase
+      .from('price_series')
+      .select('id')
+      .order('timestamp', { ascending: true })
+      .limit(excess)
+    if (oldestError) throw oldestError
+    if (oldest && oldest.length > 0) {
+      const ids = oldest.map((r) => r.id)
+      await supabase.from('price_series').delete().in('id', ids)
+    }
+  }
+}
+
 export async function loadCoherenceHistory(): Promise<CoherencePoint[]> {
   const { data, error } = await supabase
     .from('coherence_history')

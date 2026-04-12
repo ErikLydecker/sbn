@@ -8,10 +8,13 @@ import { useSettingsStore } from '@/stores/settings.store'
 import { useCoherenceHistoryStore } from '@/stores/coherence-history.store'
 import { ConnectionManager } from '@/services/binance/connection-manager'
 import { fetchHistoricalKlines } from '@/services/binance/klines'
-import { loadCoherenceHistory, appendCoherencePoints } from '@/services/persistence/db'
+import { loadCoherenceHistory, appendCoherencePoints, appendPriceTicks } from '@/services/persistence/db'
+import type { PriceTick } from '@/services/persistence/db'
 import { BINANCE_CONFIG } from '@/config/binance'
 import { DSP_CONFIG } from '@/config/dsp'
 import type { WorkerInbound, WorkerOutbound } from '@/workers/dsp.messages'
+
+let priceTickBuffer: PriceTick[] = []
 
 export function useDspWorker() {
   const workerRef = useRef<Worker | null>(null)
@@ -75,6 +78,9 @@ export function useDspWorker() {
         case 'barCount':
           setEventBarCount(msg.count)
           break
+        case 'priceTick':
+          priceTickBuffer.push(msg.data)
+          break
         case 'candles':
           setCandles(msg.bars)
           break
@@ -124,6 +130,10 @@ export function useDspWorker() {
     const id = setInterval(() => {
       const batch = flushCoherence()
       if (batch.length > 0) appendCoherencePoints(batch).catch(() => {})
+
+      const priceBatch = priceTickBuffer
+      priceTickBuffer = []
+      if (priceBatch.length > 0) appendPriceTicks(priceBatch).catch(() => {})
     }, 10_000)
     return () => clearInterval(id)
   }, [flushCoherence])

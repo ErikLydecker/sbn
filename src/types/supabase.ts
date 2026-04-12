@@ -102,6 +102,30 @@ export type Database = {
         }
         Relationships: []
       }
+      price_series: {
+        Row: {
+          denoised_return: number
+          id: number
+          log_return: number
+          price: number
+          timestamp: number
+        }
+        Insert: {
+          denoised_return: number
+          id?: never
+          log_return: number
+          price: number
+          timestamp: number
+        }
+        Update: {
+          denoised_return?: number
+          id?: never
+          log_return?: number
+          price?: number
+          timestamp?: number
+        }
+        Relationships: []
+      }
       smooth_state: {
         Row: {
           alpha: Json
