@@ -10,6 +10,8 @@
 
 import { Route as rootRouteImport } from './app/routes/__root'
 import { Route as VoxelRouteImport } from './app/routes/voxel'
+import { Route as TopologyRouteImport } from './app/routes/topology'
+import { Route as ShapeRouteImport } from './app/routes/shape'
 import { Route as SettingsRouteImport } from './app/routes/settings'
 import { Route as OptimizationRouteImport } from './app/routes/optimization'
 import { Route as HistoryRouteImport } from './app/routes/history'
@@ -21,6 +23,16 @@ import { Route as IndexRouteImport } from './app/routes/index'
 const VoxelRoute = VoxelRouteImport.update({
   id: '/voxel',
   path: '/voxel',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TopologyRoute = TopologyRouteImport.update({
+  id: '/topology',
+  path: '/topology',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShapeRoute = ShapeRouteImport.update({
+  id: '/shape',
+  path: '/shape',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -67,6 +79,8 @@ export interface FileRoutesByFullPath {
   '/history': typeof HistoryRoute
   '/optimization': typeof OptimizationRoute
   '/settings': typeof SettingsRoute
+  '/shape': typeof ShapeRoute
+  '/topology': typeof TopologyRoute
   '/voxel': typeof VoxelRoute
 }
 export interface FileRoutesByTo {
@@ -77,6 +91,8 @@ export interface FileRoutesByTo {
   '/history': typeof HistoryRoute
   '/optimization': typeof OptimizationRoute
   '/settings': typeof SettingsRoute
+  '/shape': typeof ShapeRoute
+  '/topology': typeof TopologyRoute
   '/voxel': typeof VoxelRoute
 }
 export interface FileRoutesById {
@@ -88,6 +104,8 @@ export interface FileRoutesById {
   '/history': typeof HistoryRoute
   '/optimization': typeof OptimizationRoute
   '/settings': typeof SettingsRoute
+  '/shape': typeof ShapeRoute
+  '/topology': typeof TopologyRoute
   '/voxel': typeof VoxelRoute
 }
 export interface FileRouteTypes {
@@ -100,6 +118,8 @@ export interface FileRouteTypes {
     | '/history'
     | '/optimization'
     | '/settings'
+    | '/shape'
+    | '/topology'
     | '/voxel'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -110,6 +130,8 @@ export interface FileRouteTypes {
     | '/history'
     | '/optimization'
     | '/settings'
+    | '/shape'
+    | '/topology'
     | '/voxel'
   id:
     | '__root__'
@@ -120,6 +142,8 @@ export interface FileRouteTypes {
     | '/history'
     | '/optimization'
     | '/settings'
+    | '/shape'
+    | '/topology'
     | '/voxel'
   fileRoutesById: FileRoutesById
 }
@@ -131,6 +155,8 @@ export interface RootRouteChildren {
   HistoryRoute: typeof HistoryRoute
   OptimizationRoute: typeof OptimizationRoute
   SettingsRoute: typeof SettingsRoute
+  ShapeRoute: typeof ShapeRoute
+  TopologyRoute: typeof TopologyRoute
   VoxelRoute: typeof VoxelRoute
 }
 
@@ -141,6 +167,20 @@ declare module '@tanstack/react-router' {
       path: '/voxel'
       fullPath: '/voxel'
       preLoaderRoute: typeof VoxelRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/topology': {
+      id: '/topology'
+      path: '/topology'
+      fullPath: '/topology'
+      preLoaderRoute: typeof TopologyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/shape': {
+      id: '/shape'
+      path: '/shape'
+      fullPath: '/shape'
+      preLoaderRoute: typeof ShapeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -203,6 +243,8 @@ const rootRouteChildren: RootRouteChildren = {
   HistoryRoute: HistoryRoute,
   OptimizationRoute: OptimizationRoute,
   SettingsRoute: SettingsRoute,
+  ShapeRoute: ShapeRoute,
+  TopologyRoute: TopologyRoute,
   VoxelRoute: VoxelRoute,
 }
 export const routeTree = rootRouteImport

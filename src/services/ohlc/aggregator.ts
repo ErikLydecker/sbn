@@ -58,6 +58,10 @@ export class OhlcAggregator {
     return null
   }
 
+  getIntervalMs(): number {
+    return this.intervalMs
+  }
+
   getCurrent(): OhlcBar | null {
     return this.current
   }

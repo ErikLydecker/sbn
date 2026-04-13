@@ -50,6 +50,11 @@ export const SmoothClockPanel = memo(function SmoothClockPanel({ smooth }: Smoot
               color={smooth ? coherenceColor(smooth.rBar) : undefined}
             />
             <MetricRow
+              label="PPC (bias-free)"
+              value={smooth?.ppc !== undefined ? smooth.ppc.toFixed(3) : '—'}
+              color={smooth?.ppc !== undefined ? coherenceColor(smooth.ppc) : undefined}
+            />
+            <MetricRow
               label="Clock position"
               value={smooth ? `${(smooth.clockPosition * 100).toFixed(1)}%` : '—'}
             />

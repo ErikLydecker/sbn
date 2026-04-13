@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, startTransition } from 'react'
 import { usePriceStore } from '@/stores/price.store'
 import { useAnalysisStore } from '@/stores/analysis.store'
 import { usePortfolioStore } from '@/stores/portfolio.store'
@@ -6,6 +6,8 @@ import { useGeometryStore } from '@/stores/geometry.store'
 import { useConnectionStore } from '@/stores/connection.store'
 import { useSettingsStore } from '@/stores/settings.store'
 import { useCoherenceHistoryStore } from '@/stores/coherence-history.store'
+import { useBarTimerStore } from '@/stores/bar-timer.store'
+import { useTopologyStore } from '@/stores/topology.store'
 import { ConnectionManager } from '@/services/binance/connection-manager'
 import { fetchHistoricalKlines } from '@/services/binance/klines'
 import {
@@ -14,8 +16,12 @@ import {
   appendDspTicks,
   appendPolarRosePoints,
   appendVoxelSnapshots,
+  appendTopologySnapshots,
+  pruneTables,
 } from '@/services/persistence/db'
-import type { PriceTick, DspTick, PolarRosePoint, VoxelSnapshot } from '@/services/persistence/db'
+import type { PriceTick, DspTick, PolarRosePoint, VoxelSnapshot, TopologySnapshotRow } from '@/services/persistence/db'
+import { fingerprintToVector } from '@/core/dsp/topology'
+import { computeShapeMetrics } from '@/core/dsp/shape-metrics'
 import { BINANCE_CONFIG } from '@/config/binance'
 import { DSP_CONFIG } from '@/config/dsp'
 import type { WorkerInbound, WorkerOutbound } from '@/workers/dsp.messages'
@@ -24,6 +30,7 @@ let priceTickBuffer: PriceTick[] = []
 let dspTickBuffer: DspTick[] = []
 let polarRoseBuffer: PolarRosePoint[] = []
 let voxelBuffer: VoxelSnapshot[] = []
+let topologyBuffer: TopologySnapshotRow[] = []
 
 export function useDspWorker() {
   const workerRef = useRef<Worker | null>(null)
@@ -40,6 +47,9 @@ export function useDspWorker() {
   const setConnectionHealth = useConnectionStore((s) => s.setHealth)
   const pushCoherence = useCoherenceHistoryStore((s) => s.push)
   const flushCoherence = useCoherenceHistoryStore((s) => s.flush)
+  const setBarTiming = useBarTimerStore((s) => s.setTiming)
+  const pushTopology = useTopologyStore((s) => s.push)
+  const pushShape = useTopologyStore((s) => s.pushShape)
 
   const rawWindow = useSettingsStore((s) => s.rawWindow)
   const manualK = useSettingsStore((s) => s.manualFrequencyK)
@@ -47,8 +57,10 @@ export function useDspWorker() {
 
   const backfillToWorker = useCallback((worker: Worker) => {
     const backfillLimit = DSP_CONFIG.tDom.maxLookback
+    console.debug('[sbn] backfill: fetching %d klines (%s)', backfillLimit, timeframe)
     fetchHistoricalKlines(BINANCE_CONFIG.symbol, timeframe, backfillLimit)
       .then((bars) => {
+        console.debug('[sbn] backfill: got %d bars, sending to worker', bars.length)
         const backfillMsg: WorkerInbound = { type: 'backfill', bars }
         worker.postMessage(backfillMsg)
       })
@@ -64,52 +76,95 @@ export function useDspWorker() {
     )
     workerRef.current = worker
 
+    let msgCount = 0
     worker.onmessage = (e: MessageEvent<WorkerOutbound>) => {
       const msg = e.data
+      msgCount++
+      if (msgCount <= 3 || msgCount % 50 === 0) {
+        console.debug('[sbn] worker msg #%d: %s', msgCount, msg.type)
+      }
+
       switch (msg.type) {
-        case 'raw':
-          setRaw(msg.data)
-          break
-        case 'smooth':
-          setSmooth(msg.data)
-          if (!msg.data.isBootstrapping) {
-            pushCoherence(msg.data.rBar, msg.data.vmKappa, msg.data.recurrenceRate, msg.data.structureScore, msg.data.tDom)
-          }
-          break
-        case 'portfolio':
-          updatePortfolio(msg.data)
-          break
-        case 'geometry':
-          setGeometry(msg.data)
-          break
-        case 'barCount':
-          setEventBarCount(msg.count)
-          break
         case 'priceTick':
           priceTickBuffer.push(msg.data)
-          break
+          return
         case 'dspTick':
           dspTickBuffer.push(msg.data)
-          break
+          return
         case 'polarRose':
           polarRoseBuffer.push(msg.data)
-          break
+          return
         case 'voxelSnapshot':
           voxelBuffer.push(msg.data)
-          break
-        case 'candles':
-          setCandles(msg.bars)
-          break
+          return
+        case 'barTiming':
+          setBarTiming(msg.data.lastBarTime, msg.data.intervalMs)
+          return
       }
+
+      startTransition(() => {
+        switch (msg.type) {
+          case 'raw':
+            setRaw(msg.data)
+            break
+          case 'smooth':
+            setSmooth(msg.data)
+            if (msg.data.isBootstrapping) {
+              if (msgCount <= 5) console.debug('[sbn] bootstrapping: %d%%', Math.round(msg.data.bootstrapProgress * 100))
+            } else {
+              pushCoherence(msg.data.rBar, msg.data.vmKappa, msg.data.recurrenceRate, msg.data.fixedRecurrenceRate, msg.data.structureScore, msg.data.tDom, msg.data.windingNumber, msg.data.topologyScore, msg.data.topologyClass, msg.data.ppc, msg.data.hurst)
+              if (msg.data.embeddingVecs && msg.data.embeddingVecs.length >= 4) {
+                const shape = computeShapeMetrics(msg.data.embeddingVecs, Date.now())
+                if (shape) pushShape(shape)
+              }
+            }
+            break
+          case 'portfolio':
+            updatePortfolio(msg.data)
+            break
+          case 'geometry':
+            setGeometry(msg.data)
+            break
+          case 'barCount':
+            setEventBarCount(msg.count)
+            break
+          case 'candles':
+            setCandles(msg.bars)
+            break
+          case 'topology':
+            pushTopology(msg.data)
+            topologyBuffer.push({
+              timestamp: msg.data.fingerprint.timestamp,
+              windingNumber: msg.data.windingNumber,
+              absWinding: msg.data.absWinding,
+              circulation: msg.data.circulation,
+              loopClosure: msg.data.loopClosure,
+              corrDim: msg.data.fingerprint.corrDim,
+              recurrenceRate: msg.data.fingerprint.recurrenceRate,
+              structureScore: msg.data.fingerprint.structureScore,
+              topologyClass: msg.data.topologyClass,
+              topologyScore: msg.data.topologyScore,
+              kappa: msg.data.fingerprint.kappa,
+              fingerprintVector: fingerprintToVector(msg.data.fingerprint),
+            })
+            break
+        }
+      })
     }
 
+    let priceCount = 0
     const conn = new ConnectionManager({
       onPrice: (price) => {
+        priceCount++
+        if (priceCount === 1) console.debug('[sbn] first price: $%s', price.toFixed(2))
         pushPrice(price)
         const msg: WorkerInbound = { type: 'price', price }
         worker.postMessage(msg)
       },
-      onStatusChange: setConnectionStatus,
+      onStatusChange: (status) => {
+        console.debug('[sbn] ws: %s', status.status, 'source' in status ? status.source : '')
+        setConnectionStatus(status)
+      },
       onHealthChange: setConnectionHealth,
       onGapDetected: () => {
         backfillToWorker(worker)
@@ -117,6 +172,7 @@ export function useDspWorker() {
     })
     connRef.current = conn
 
+    console.debug('[sbn] starting pipeline')
     backfillToWorker(worker)
     conn.start()
 
@@ -126,7 +182,7 @@ export function useDspWorker() {
       workerRef.current = null
       connRef.current = null
     }
-  }, [pushPrice, setCandles, setRaw, setSmooth, setEventBarCount, updatePortfolio, setGeometry, setConnectionStatus, setConnectionHealth, timeframe, backfillToWorker])
+  }, [pushPrice, setCandles, setRaw, setSmooth, setEventBarCount, updatePortfolio, setGeometry, setConnectionStatus, setConnectionHealth, timeframe, backfillToWorker, pushTopology, pushShape])
 
   useEffect(() => {
     const worker = workerRef.current
@@ -136,22 +192,37 @@ export function useDspWorker() {
   }, [rawWindow, manualK, timeframe])
 
   useEffect(() => {
+    const logErr = (table: string) => (err: unknown) => {
+      console.error('[sbn] %s insert failed:', table, err)
+    }
+
     const id = setInterval(() => {
       const coherenceBatch = flushCoherence()
-      if (coherenceBatch.length > 0) appendCoherencePoints(coherenceBatch).catch(() => {})
+      if (coherenceBatch.length > 0) appendCoherencePoints(coherenceBatch).catch(logErr('coherence'))
 
       const priceBatch = priceTickBuffer; priceTickBuffer = []
-      if (priceBatch.length > 0) appendPriceTicks(priceBatch).catch(() => {})
+      if (priceBatch.length > 0) appendPriceTicks(priceBatch).catch(logErr('price_series'))
 
       const dspBatch = dspTickBuffer; dspTickBuffer = []
-      if (dspBatch.length > 0) appendDspTicks(dspBatch).catch(() => {})
+      if (dspBatch.length > 0) appendDspTicks(dspBatch).catch(logErr('dsp_ticks'))
 
       const polarBatch = polarRoseBuffer; polarRoseBuffer = []
-      if (polarBatch.length > 0) appendPolarRosePoints(polarBatch).catch(() => {})
+      if (polarBatch.length > 0) appendPolarRosePoints(polarBatch).catch(logErr('polar_rose'))
 
       const voxelBatch = voxelBuffer; voxelBuffer = []
-      if (voxelBatch.length > 0) appendVoxelSnapshots(voxelBatch).catch(() => {})
+      if (voxelBatch.length > 0) appendVoxelSnapshots(voxelBatch).catch(logErr('voxel_snapshots'))
+
+      const topoBatch = topologyBuffer; topologyBuffer = []
+      if (topoBatch.length > 0) appendTopologySnapshots(topoBatch).catch(logErr('topology_snapshots'))
     }, 10_000)
-    return () => clearInterval(id)
+
+    const pruneId = setInterval(() => {
+      pruneTables().catch(logErr('prune'))
+    }, 300_000)
+
+    return () => {
+      clearInterval(id)
+      clearInterval(pruneId)
+    }
   }, [flushCoherence])
 }

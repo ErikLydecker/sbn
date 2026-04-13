@@ -1,8 +1,9 @@
-import { memo, useState, useEffect } from 'react'
+import { memo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DSP_CONFIG } from '@/config/dsp'
 import { useSettingsStore } from '@/stores/settings.store'
 import { useAnalysisStore } from '@/stores/analysis.store'
+import { useBarCountdown, formatCountdown } from '@/hooks/use-bar-countdown'
 import type { SmoothAnalysis } from '@/schemas/analysis'
 
 interface DiagnosticsPanelProps {
@@ -11,21 +12,6 @@ interface DiagnosticsPanelProps {
 
 const gCfg = DSP_CONFIG.goertzel
 const effectiveMemory = Math.ceil(1 / (1 - gCfg.lambda))
-
-const TF_MS: Record<string, number> = {
-  '1s': 1_000,
-  '1m': 60_000,
-  '5m': 300_000,
-}
-
-function formatCountdown(ms: number): string {
-  if (ms <= 0) return '0s'
-  const totalSec = Math.ceil(ms / 1000)
-  if (totalSec < 60) return `${totalSec}s`
-  const min = Math.floor(totalSec / 60)
-  const sec = totalSec % 60
-  return `${min}:${sec.toString().padStart(2, '0')}`
-}
 
 function formatAgo(ms: number): string {
   if (ms <= 0) return 'just now'
@@ -38,18 +24,9 @@ function formatAgo(ms: number): string {
 export const DiagnosticsPanel = memo(function DiagnosticsPanel({ smooth }: DiagnosticsPanelProps) {
   const timeframe = useSettingsStore((s) => s.timeframe)
   const lastAnalysisAt = useAnalysisStore((s) => s.lastAnalysisAt)
+  const { remainingMs, pct } = useBarCountdown()
 
-  const intervalMs = TF_MS[timeframe] ?? 60_000
-  const tickRate = intervalMs <= 1_000 ? 200 : 1_000
-
-  const [now, setNow] = useState(Date.now())
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), tickRate)
-    return () => clearInterval(id)
-  }, [tickRate])
-
-  const remainingMs = intervalMs - (now % intervalMs)
-  const agoMs = lastAnalysisAt > 0 ? now - lastAnalysisAt : -1
+  const agoMs = lastAnalysisAt > 0 ? Date.now() - lastAnalysisAt : -1
 
   const isGoertzelActive = gCfg.useGoertzel && smooth?.tDomFrac !== undefined
   const trackerLabel = !gCfg.useGoertzel
@@ -96,6 +73,19 @@ export const DiagnosticsPanel = memo(function DiagnosticsPanel({ smooth }: Diagn
     ['HMM dwell D', smooth ? `${smooth.hmmDwell} bars/state` : '—'],
     ['HMM p_self', smooth ? smooth.hmmPSelf.toFixed(2) : '—'],
     ['Bar count', smooth ? `${smooth.barCount} bars` : '—'],
+    [
+      'Hurst H',
+      smooth?.hurst !== undefined ? smooth.hurst.toFixed(3) : '—',
+      smooth?.hurst !== undefined
+        ? smooth.hurst < 0.45 ? 'text-[#50dd80]'
+          : smooth.hurst > 0.55 ? 'text-[#ff5050]'
+          : undefined
+        : undefined,
+    ],
+    [
+      'PPC',
+      smooth?.ppc !== undefined ? smooth.ppc.toFixed(3) : '—',
+    ],
   ]
 
   return (
@@ -107,7 +97,7 @@ export const DiagnosticsPanel = memo(function DiagnosticsPanel({ smooth }: Diagn
             remaining={formatCountdown(remainingMs)}
             ago={agoMs >= 0 ? formatAgo(agoMs) : null}
             timeframe={timeframe}
-            pct={1 - remainingMs / intervalMs}
+            pct={pct}
           />
         </div>
       </CardHeader>

@@ -12,9 +12,9 @@ export const RecurrenceHistoryChart = memo(function RecurrenceHistoryChart({
   return (
     <MetricsHistoryChart
       points={points}
-      valueKey="recurrenceRate"
-      color="#ff6b6b"
-      label="RECURRENCE"
+      valueKey="fixedRecurrenceRate"
+      color="#d0d6e0"
+      label="RECURRENCE RATE"
       thresholdValue={0.1}
     />
   )

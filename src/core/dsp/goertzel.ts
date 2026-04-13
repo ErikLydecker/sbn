@@ -224,4 +224,33 @@ export class GoertzelBank {
       this.push(x)
     }
   }
+
+  serialize(): GoertzelBankSnapshot {
+    return {
+      re: Array.from(this.re),
+      im: Array.from(this.im),
+      persistence: Array.from(this.persistence),
+      phase: this.phase,
+      sampleCount: this._sampleCount,
+    }
+  }
+
+  restore(snap: GoertzelBankSnapshot): void {
+    const n = Math.min(snap.re.length, this.maxK)
+    for (let i = 0; i < n; i++) {
+      this.re[i] = snap.re[i]!
+      this.im[i] = snap.im[i]!
+      this.persistence[i] = snap.persistence[i]!
+    }
+    this.phase = snap.phase
+    this._sampleCount = snap.sampleCount
+  }
+}
+
+export interface GoertzelBankSnapshot {
+  re: number[]
+  im: number[]
+  persistence: number[]
+  phase: number
+  sampleCount: number
 }

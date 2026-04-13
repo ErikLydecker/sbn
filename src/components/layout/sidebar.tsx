@@ -7,7 +7,9 @@ import {
   Settings,
   BrainCircuit,
   Hexagon,
+  Orbit,
   Box,
+  Shapes,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -18,6 +20,8 @@ const NAV_ITEMS: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/history', label: 'History', icon: History },
   { to: '/analytics', label: 'Analytics', icon: BarChart3 },
   { to: '/geometry', label: 'Geometry', icon: Hexagon },
+  { to: '/topology', label: 'Topology', icon: Orbit },
+  { to: '/shape', label: 'Shape', icon: Shapes },
   { to: '/voxel', label: 'Voxel', icon: Box },
   { to: '/optimization', label: 'Optimization', icon: BrainCircuit },
   { to: '/backtest', label: 'Backtest', icon: FlaskConical },

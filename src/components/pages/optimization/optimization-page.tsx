@@ -41,7 +41,7 @@ export function OptimizationPage() {
   const reentryCooldowns = usePortfolioStore((s) => s.reentryCooldowns)
 
   const totalObservations = useMemo(
-    () => gpStates.reduce((sum, gp) => sum + gp.inputs.length, 0),
+    () => gpStates.reduce((sum, gp) => sum + (gp?.inputs?.length ?? 0), 0),
     [gpStates],
   )
 
@@ -99,16 +99,20 @@ export function OptimizationPage() {
 
         <TabsContent value="regimes">
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            {REGIME_DEFINITIONS.map((regime) => (
-              <RegimeGpCard
-                key={regime.id}
-                regimeId={regime.id}
-                gp={gpStates[regime.id]!}
-                trades={trades}
-                isActive={regime.id === currentRegimeId}
-                cooldown={reentryCooldowns[regime.id] ?? 0}
-              />
-            ))}
+            {REGIME_DEFINITIONS.map((regime) => {
+              const gp = gpStates[regime.id]
+              if (!gp) return null
+              return (
+                <RegimeGpCard
+                  key={regime.id}
+                  regimeId={regime.id}
+                  gp={gp}
+                  trades={trades}
+                  isActive={regime.id === currentRegimeId}
+                  cooldown={reentryCooldowns[regime.id] ?? 0}
+                />
+              )
+            })}
           </div>
         </TabsContent>
 
@@ -412,6 +416,7 @@ const ObservationLog = memo(function ObservationLog({ gpStates }: ObservationLog
   const allObservations = useMemo(() => {
     const obs: { regimeId: number; paramVector: number[]; reward: number; obsIdx: number }[] = []
     gpStates.forEach((gp, regimeId) => {
+      if (!gp?.inputs) return
       gp.inputs.forEach((input, idx) => {
         obs.push({
           regimeId,
@@ -555,7 +560,8 @@ const ConvergencePanel = memo(function ConvergencePanel({ gpStates }: Convergenc
         <CardContent>
           <div className="space-y-3">
             {REGIME_DEFINITIONS.map((regime) => {
-              const gp = gpStates[regime.id]!
+              const gp = gpStates[regime.id]
+              if (!gp) return null
               return (
                 <RegimeConvergenceRow
                   key={regime.id}

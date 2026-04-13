@@ -5,12 +5,15 @@ export const DSP_CONFIG = {
   minBootstrapBars: 128,
   tDom: {
     minPeriod: 8,
-    maxPeriod: 200,
+    maxPeriod: 80,
     lookbackMultiplier: 4,
     maxLookback: 256,
     fallback: 40,
     emaAlpha: 0.15,
     hmmRebuildPct: 0.15,
+    hysteresisAbsolute: 2,
+    hysteresisRelative: 0.12,
+    dwellCycles: 3,
   },
   tau: {
     minTau: 2,
@@ -70,6 +73,13 @@ export const DSP_CONFIG = {
     minWindow: 32,
     maxWindow: 256,
     maxDftK: 48,
+  },
+  topology: {
+    windingLoopThreshold: 0.7,
+    stabilityWindow: 20,
+    circulationNormalize: true,
+    fingerprintSimilarityThreshold: 0.85,
+    maxFingerprintHistory: 500,
   },
   analysisIntervalMs: 300,
 } as const

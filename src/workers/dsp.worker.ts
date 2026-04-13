@@ -6,6 +6,7 @@ import { portfolioTick, createPortfolioState, restorePortfolioState } from '@/co
 import type { PortfolioState, ClockSnapshot } from '@/core/trading/engine'
 import type { WorkerInbound, WorkerOutbound } from './dsp.messages'
 import { DSP_CONFIG } from '@/config/dsp'
+import { GoertzelBank } from '@/core/dsp/goertzel'
 import { saveGpStates, savePortfolio, saveSmoothState, loadGpStates, loadPortfolio, loadSmoothState, clearPersistedState, PERSISTENCE_VERSION } from '@/services/persistence/db'
 
 const resampler = new EventClockResampler()
@@ -52,6 +53,19 @@ function persistState() {
     lastTdom: smoothState.lastTdom,
     phaseKappaHistory: smoothState.phaseKappaHistory.slice(),
     lastRegimeId: smoothState.lastRegimeId,
+    tDomEma: smoothState.tDomEma,
+    tDomAccepted: smoothState.tDomAccepted,
+    tDomCandidate: smoothState.tDomCandidate,
+    tDomDwellCount: smoothState.tDomDwellCount,
+    frozenTau: smoothState.frozenTau,
+    frozenDim: smoothState.frozenDim,
+    eventBars: resampler.getBars().slice(),
+    eventTimestamps: resampler.getTimestamps().slice(),
+    lastClosePrice: resampler.getLastPrice(),
+    phaseBasisE1: smoothState.phaseBasis?.e1.slice(),
+    phaseBasisE2: smoothState.phaseBasis?.e2.slice(),
+    goertzelSnapshot: smoothState.goertzelBank?.serialize() ?? null,
+    topologyState: smoothState.topologyState ?? null,
   }).catch(() => {})
 }
 
@@ -84,6 +98,7 @@ async function restorePersistedState() {
       })
     }
     if (savedSmooth) {
+      const fallback = DSP_CONFIG.tDom.fallback
       smoothState = {
         vmMu: savedSmooth.vmMu,
         vmKappa: savedSmooth.vmKappa,
@@ -102,6 +117,36 @@ async function restorePersistedState() {
         consecutiveSoftCorrections: 0,
         phaseKappaHistory: savedSmooth.phaseKappaHistory?.slice() ?? [],
         lastRegimeId: savedSmooth.lastRegimeId ?? -1,
+        tDomEma: savedSmooth.tDomEma ?? savedSmooth.tDom ?? fallback,
+        tDomAccepted: savedSmooth.tDomAccepted ?? savedSmooth.tDom ?? fallback,
+        tDomCandidate: savedSmooth.tDomCandidate ?? savedSmooth.tDom ?? fallback,
+        tDomDwellCount: savedSmooth.tDomDwellCount ?? 0,
+        frozenTau: savedSmooth.frozenTau ?? savedSmooth.tau ?? 4,
+        frozenDim: savedSmooth.frozenDim ?? savedSmooth.dim ?? 5,
+        phaseBasis: savedSmooth.phaseBasisE1 && savedSmooth.phaseBasisE1.length > 0
+          ? { e1: savedSmooth.phaseBasisE1, e2: savedSmooth.phaseBasisE2 ?? [] }
+          : null,
+        topologyState: savedSmooth.topologyState ?? null,
+      }
+
+      if (savedSmooth.goertzelSnapshot) {
+        const gCfg = DSP_CONFIG.goertzel
+        const maxK = DSP_CONFIG.raw.maxDftK
+        const bank = new GoertzelBank(maxK, gCfg.refLength, gCfg.lambda, gCfg.subBinInterp, {
+          persistenceDecay: gCfg.persistenceDecay,
+          persistenceThreshold: gCfg.persistenceThreshold,
+          persistenceWeight: gCfg.persistenceWeight,
+          harmonicThreshold: gCfg.harmonicThreshold,
+        })
+        bank.restore(savedSmooth.goertzelSnapshot)
+        smoothState.goertzelBank = bank
+      }
+
+      if (savedSmooth.eventBars && savedSmooth.eventBars.length > 0) {
+        const lastPrice = savedSmooth.lastClosePrice ?? 0
+        if (lastPrice > 0) {
+          resampler.restore(savedSmooth.eventBars, savedSmooth.eventTimestamps ?? [], lastPrice)
+        }
       }
     }
   } catch {
@@ -123,7 +168,8 @@ function runAnalysis(price: number) {
     post({ type: 'raw', data: rawResult })
   }
 
-  const smoothResult = analyseSmooth(bars, smoothState)
+  const timestamps = resampler.getTimestamps()
+  const smoothResult = analyseSmooth(bars, smoothState, timestamps)
   if (smoothResult) {
     smoothState = smoothResult.state
     const sr = smoothResult.result
@@ -175,11 +221,15 @@ function runAnalysis(price: number) {
           hmmPSelf: sr.hmmPSelf,
           barCount: sr.barCount,
           recurrenceRate: sr.recurrenceRate,
+          fixedRecurrenceRate: sr.fixedRecurrenceRate,
           corrDimEstimate: sr.corrDimEstimate,
           structureScore: sr.structureScore,
+          subspaceStability: sr.subspaceStability,
           rawFrequencies: rawResult?.frequencies,
           goertzelSpectrum: sr.goertzelSpectrum,
           trail: sr.trail,
+          ppc: sr.ppc,
+          hurst: sr.hurst,
         },
       })
 
@@ -198,6 +248,7 @@ function runAnalysis(price: number) {
           embeddingVecs: sr.embeddingVecs,
           recurrenceSize: sr.recurrenceSize,
           recurrenceRate: sr.recurrenceRate,
+          fixedRecurrenceRate: sr.fixedRecurrenceRate,
           corrDimEstimate: sr.corrDimEstimate,
           structureScore: sr.structureScore,
         },
@@ -214,14 +265,39 @@ function runAnalysis(price: number) {
       })
     }
 
+    if (!sr.isBootstrapping && sr.topologyScore !== undefined) {
+      post({
+        type: 'topology',
+        data: {
+          windingNumber: sr.windingNumber ?? 0,
+          absWinding: sr.absWinding ?? 0,
+          circulation: sr.circulation ?? 0,
+          loopClosure: sr.loopClosure ?? 0,
+          topologyStability: sr.topologyStability ?? 0,
+          topologyScore: sr.topologyScore,
+          topologyClass: sr.topologyClass ?? 'drift',
+          isLoop: (sr.absWinding ?? 0) >= DSP_CONFIG.topology.windingLoopThreshold,
+          fingerprint: smoothState.topologyState?.fingerprintHistory[smoothState.topologyState.fingerprintHistory.length - 1] ?? {
+            timestamp: Date.now(), windingNumber: 0, absWinding: 0, circulation: 0, loopClosure: 0,
+            corrDim: 0, recurrenceRate: 0, structureScore: 0, topologyClass: 'drift' as const, kappa: 0,
+          },
+          matchedFingerprints: [],
+        },
+      })
+    }
+
     if (!sr.isBootstrapping && smoothState.vmKappa >= 0.1 && bars.length >= DSP_CONFIG.minBootstrapBars) {
       const snapshot: ClockSnapshot = {
         alpha: smoothState.alpha,
         kappa: smoothState.vmKappa,
         rBar: smoothResult.result.rBar,
+        ppc: smoothResult.result.ppc ?? 0,
+        hurst: smoothResult.result.hurst ?? 0.5,
         clockPos: smoothState.clockPos,
         price,
         tDom: smoothState.tDom,
+        topologyScore: sr.topologyScore ?? 0,
+        topologyClass: sr.topologyClass ?? 'drift',
       }
       portfolioState = portfolioTick(portfolioState, snapshot)
 
@@ -249,18 +325,25 @@ function runAnalysis(price: number) {
   }
 }
 
+function postBarTiming(barTime: number) {
+  post({ type: 'barTiming', data: { lastBarTime: barTime, intervalMs: ohlc.getIntervalMs() } })
+}
+
 function handlePrice(price: number) {
   const closedBar = ohlc.pushTick(price)
 
   if (closedBar) {
-    resampler.pushPrice(closedBar.close)
+    resampler.pushPrice(closedBar.close, closedBar.time)
     runAnalysis(closedBar.close)
+    postBarTiming(closedBar.time)
   }
 
   const now = performance.now()
   if (now - lastAnalysisTime >= DSP_CONFIG.analysisIntervalMs) {
     lastAnalysisTime = now
     post({ type: 'candles', bars: ohlc.getSnapshot() })
+    const current = ohlc.getCurrent()
+    if (current) postBarTiming(current.time)
   }
 }
 
@@ -269,13 +352,20 @@ function handleBackfill(bars: import('@/services/ohlc/aggregator').OhlcBar[]) {
 
   ohlc.loadHistorical(bars)
 
+  const existingTimestamps = resampler.getTimestamps()
+  const lastPersistedTs = existingTimestamps.length > 0
+    ? existingTimestamps[existingTimestamps.length - 1]!
+    : 0
+
   for (const bar of bars) {
-    resampler.pushPrice(bar.close)
+    if (bar.time <= lastPersistedTs) continue
+    resampler.pushPrice(bar.close, bar.time)
   }
 
-  const lastClose = bars[bars.length - 1]!.close
-  runAnalysis(lastClose)
+  const lastBar = bars[bars.length - 1]!
+  runAnalysis(lastBar.close)
   post({ type: 'candles', bars: ohlc.getSnapshot() })
+  postBarTiming(lastBar.time)
 }
 
 self.onmessage = (e: MessageEvent<WorkerInbound>) => {

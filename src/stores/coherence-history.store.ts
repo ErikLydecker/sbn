@@ -6,7 +6,7 @@ const MAX_MEMORY_POINTS = 2000
 export interface CoherenceHistoryState {
   points: CoherencePoint[]
   loaded: boolean
-  push: (rBar: number, kappa: number, recurrenceRate?: number, structureScore?: number, tDom?: number) => void
+  push: (rBar: number, kappa: number, recurrenceRate?: number, fixedRecurrenceRate?: number, structureScore?: number, tDom?: number, windingNumber?: number, topologyScore?: number, topologyClass?: string, ppc?: number, hurst?: number) => void
   load: (persisted: CoherencePoint[]) => void
   flush: () => CoherencePoint[]
   reset: () => void
@@ -18,8 +18,8 @@ export const useCoherenceHistoryStore = create<CoherenceHistoryState>((set) => (
   points: [],
   loaded: false,
 
-  push: (rBar, kappa, recurrenceRate?, structureScore?, tDom?) => {
-    const pt: CoherencePoint = { timestamp: Date.now(), rBar, kappa, recurrenceRate, structureScore, tDom }
+  push: (rBar, kappa, recurrenceRate?, fixedRecurrenceRate?, structureScore?, tDom?, windingNumber?, topologyScore?, topologyClass?, ppc?, hurst?) => {
+    const pt: CoherencePoint = { timestamp: Date.now(), rBar, kappa, recurrenceRate, fixedRecurrenceRate, structureScore, tDom, windingNumber, topologyScore, topologyClass, ppc, hurst }
     unflushed.push(pt)
     set((s) => {
       const next = [...s.points, pt]

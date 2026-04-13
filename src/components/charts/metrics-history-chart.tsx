@@ -6,34 +6,42 @@ import {
   type ISeriesApi,
   type LineData,
   type Time,
-  ColorType,
   LineType,
 } from 'lightweight-charts'
+import { chartOptions } from './chart-defaults'
+import { BarTimerOverlay } from './bar-timer-overlay'
 import type { CoherencePoint } from '@/services/persistence/db'
 import { dema } from '@/core/math/dema'
+import { getVisibleRange } from '@/stores/chart-timeframe.store'
 
 interface MetricsHistoryChartProps {
   points: CoherencePoint[]
-  valueKey: 'rBar' | 'recurrenceRate' | 'structureScore' | 'tDom'
+  valueKey: 'rBar' | 'recurrenceRate' | 'fixedRecurrenceRate' | 'structureScore' | 'tDom' | 'windingNumber' | 'topologyScore' | 'ppc' | 'hurst'
   color: string
   label: string
   thresholdValue?: number
   formatValue?: (v: number) => string
+  visibleRangeMinutes?: number
 }
 
 const DEFAULT_FORMAT = (v: number) => `${(v * 100).toFixed(1)}%`
 
 function extractSeries(
   points: CoherencePoint[],
-  key: 'rBar' | 'recurrenceRate' | 'structureScore' | 'tDom',
+  key: 'rBar' | 'recurrenceRate' | 'fixedRecurrenceRate' | 'structureScore' | 'tDom' | 'windingNumber' | 'topologyScore' | 'ppc' | 'hurst',
 ): { times: number[]; values: number[] } {
   const times: number[] = []
   const values: number[] = []
   for (const p of points) {
     const v = p[key]
     if (v == null) continue
-    times.push(Math.floor(p.timestamp / 1000))
-    values.push(v)
+    const t = Math.floor(p.timestamp / 1000)
+    if (times.length > 0 && times[times.length - 1] === t) {
+      values[values.length - 1] = v
+    } else {
+      times.push(t)
+      values.push(v)
+    }
   }
   return { times, values }
 }
@@ -49,6 +57,7 @@ export const MetricsHistoryChart = memo(function MetricsHistoryChart({
   label,
   thresholdValue,
   formatValue = DEFAULT_FORMAT,
+  visibleRangeMinutes,
 }: MetricsHistoryChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -65,34 +74,21 @@ export const MetricsHistoryChart = memo(function MetricsHistoryChart({
     const el = containerRef.current
     if (!el) return
 
-    const chart = createChart(el, {
+    const chart = createChart(el, chartOptions({
       width: el.clientWidth,
       height: 320,
-      layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: '#62666d',
-        fontSize: 10,
-        fontFamily: "'SF Mono', 'Fira Code', monospace",
-      },
-      grid: {
-        vertLines: { color: 'rgba(255,255,255,0.03)' },
-        horzLines: { color: 'rgba(255,255,255,0.03)' },
-      },
       crosshair: {
         vertLine: { color: `${color}4d`, labelBackgroundColor: color },
         horzLine: { color: `${color}4d`, labelBackgroundColor: color },
       },
       rightPriceScale: {
-        borderColor: 'rgba(255,255,255,0.06)',
         scaleMargins: { top: 0.05, bottom: 0.05 },
       },
       timeScale: {
-        borderColor: 'rgba(255,255,255,0.06)',
         timeVisible: true,
         secondsVisible: false,
       },
-      handleScroll: { vertTouchDrag: false },
-    })
+    }))
 
     const mainSeries = chart.addSeries(LineSeries, {
       color: 'rgba(255,255,255,0.85)',
@@ -151,7 +147,12 @@ export const MetricsHistoryChart = memo(function MetricsHistoryChart({
           { time: times[times.length - 1]! as Time, value: thresholdValue },
         ])
       }
-      chart.timeScale().fitContent()
+      if (visibleRangeMinutes) {
+        const vr = getVisibleRange(visibleRangeMinutes)
+        chart.timeScale().setVisibleRange({ from: vr.from as Time, to: vr.to as Time })
+      } else {
+        chart.timeScale().fitContent()
+      }
     }
 
     const ro = new ResizeObserver((entries) => {
@@ -192,8 +193,13 @@ export const MetricsHistoryChart = memo(function MetricsHistoryChart({
       ])
     }
 
-    chart.timeScale().scrollToRealTime()
-  }, [times, values, dema50, dema200, thresholdValue])
+    if (visibleRangeMinutes) {
+      const vr = getVisibleRange(visibleRangeMinutes)
+      chart.timeScale().setVisibleRange({ from: vr.from as Time, to: vr.to as Time })
+    } else {
+      chart.timeScale().scrollToRealTime()
+    }
+  }, [times, values, dema50, dema200, thresholdValue, visibleRangeMinutes])
 
   const latest = values.length > 0 ? values[values.length - 1]! : null
   const avg = values.length > 0
@@ -222,11 +228,14 @@ export const MetricsHistoryChart = memo(function MetricsHistoryChart({
           <span className="text-[#50dd80]">{latestD200 != null ? formatValue(latestD200) : '—'}</span>
         </span>
       </div>
-      <div
-        ref={containerRef}
-        className="w-full rounded-lg"
-        style={{ minHeight: 320 }}
-      />
+      <div className="relative">
+        <div
+          ref={containerRef}
+          className="w-full rounded-lg"
+          style={{ minHeight: 320 }}
+        />
+        <BarTimerOverlay />
+      </div>
     </div>
   )
 })

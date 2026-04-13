@@ -13,7 +13,7 @@ export const StructureHistoryChart = memo(function StructureHistoryChart({
     <MetricsHistoryChart
       points={points}
       valueKey="structureScore"
-      color="#50dd80"
+      color="#d0d6e0"
       label="STRUCTURE"
       thresholdValue={0.5}
     />

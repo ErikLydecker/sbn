@@ -55,10 +55,24 @@ export const SmoothAnalysisSchema = z.object({
   recurrenceMatrix: z.array(z.number()).optional(),
   recurrenceSize: z.number().int().nonnegative().optional(),
   recurrenceRate: z.number().optional(),
+  fixedRecurrenceRate: z.number().optional(),
   corrDimEstimate: z.number().optional(),
   structureScore: z.number().min(0).max(1).optional(),
+  subspaceStability: z.number().min(0).max(1).optional(),
   pipelineReturns: z.array(z.number()).optional(),
   pipelineDenoised: z.array(z.number()).optional(),
+  pipelineTimestamps: z.array(z.number()).optional(),
+
+  windingNumber: z.number().optional(),
+  absWinding: z.number().optional(),
+  circulation: z.number().optional(),
+  loopClosure: z.number().optional(),
+  topologyStability: z.number().min(0).max(1).optional(),
+  topologyScore: z.number().min(0).max(1).optional(),
+  topologyClass: z.enum(['stable_loop', 'unstable_loop', 'drift', 'chaotic']).optional(),
+
+  ppc: z.number().optional(),
+  hurst: z.number().min(0).max(1).optional(),
 })
 
 export type SmoothAnalysis = z.infer<typeof SmoothAnalysisSchema>

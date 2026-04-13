@@ -6,7 +6,7 @@ import { createGp, gpAddObservation, restoreGp } from './gaussian-process'
 import type { PersistedGpState, PersistedPortfolio } from '@/services/persistence/db'
 import { ucbAcquire, decodeParams } from './ucb'
 import { classifyRegime, regimeDirection } from './regimes'
-import { shouldEnter, shouldExit } from './signals'
+import { shouldEnter, shouldExit, kappaConfidence, topologyConfidence } from './signals'
 import { circDiff } from '@/core/math/circular'
 import { TRADING_CONFIG } from '@/config/trading'
 
@@ -25,6 +25,8 @@ export interface PortfolioState {
   clockVel: number
   clockAccel: number
   flipBarCount: number
+  kappaPersistence: number
+  prevTopologyClass: string
 }
 
 export function createPortfolioState(): PortfolioState {
@@ -43,6 +45,8 @@ export function createPortfolioState(): PortfolioState {
     clockVel: 0,
     clockAccel: 0,
     flipBarCount: 0,
+    kappaPersistence: 0,
+    prevTopologyClass: 'drift',
   }
 }
 
@@ -65,6 +69,8 @@ export function restorePortfolioState(
     clockVel: 0,
     clockAccel: 0,
     flipBarCount: 0,
+    kappaPersistence: 0,
+    prevTopologyClass: 'drift',
   }
 }
 
@@ -72,9 +78,13 @@ export interface ClockSnapshot {
   alpha: HmmAlpha
   kappa: number
   rBar: number
+  ppc: number
+  hurst: number
   clockPos: number
   price: number
   tDom: number
+  topologyScore: number
+  topologyClass: string
 }
 
 export function portfolioTick(
@@ -90,6 +100,10 @@ export function portfolioTick(
   next.clockVel = vel
   next.clockAccel = vel - prevVel
 
+  next.kappaPersistence = snapshot.kappa >= TRADING_CONFIG.kappaFloor
+    ? next.kappaPersistence + 1
+    : 0
+
   const regimeId = classifyRegime(snapshot.alpha, snapshot.kappa)
   next.currentRegimeId = regimeId
 
@@ -102,7 +116,9 @@ export function portfolioTick(
       next.flipBarCount = 0
     }
 
-    const exitReason = shouldExit(next.position, regimeId, snapshot.clockPos, snapshot.price, next.barCount, snapshot.tDom, next.flipBarCount)
+    const topoClass = snapshot.topologyClass as import('@/core/dsp/topology').TopologyClass | undefined
+    const prevTopo = next.prevTopologyClass as import('@/core/dsp/topology').TopologyClass | undefined
+    const exitReason = shouldExit(next.position, regimeId, snapshot.clockPos, snapshot.price, next.barCount, snapshot.tDom, next.flipBarCount, topoClass, prevTopo)
     if (exitReason) {
       closeTrade(next, exitReason, snapshot.price, snapshot.tDom)
       next.flipBarCount = 0
@@ -115,10 +131,12 @@ export function portfolioTick(
     const params = decodeParams(xNorm)
     const dir = regimeDirection(regimeId)
 
-    if (shouldEnter(regimeId, vel, next.clockAccel, snapshot.kappa, params, next.cooldowns, snapshot.alpha)) {
-      openTrade(next, regimeId, dir as TradeDirection, snapshot.price, snapshot.clockPos, xNorm, params, snapshot.kappa, snapshot.rBar)
+    if (shouldEnter(regimeId, vel, next.clockAccel, snapshot.kappa, params, next.cooldowns, snapshot.alpha, next.kappaPersistence, snapshot.topologyScore, snapshot.hurst)) {
+      openTrade(next, regimeId, dir as TradeDirection, snapshot.price, snapshot.clockPos, xNorm, params, snapshot.kappa, snapshot.rBar, snapshot.topologyScore)
     }
   }
+
+  next.prevTopologyClass = snapshot.topologyClass
 
   const unrealised = next.position ? calcPnl(next.position, snapshot.price) : 0
   next.equityCurve = [...next.equityCurve, next.equity + unrealised]
@@ -151,11 +169,18 @@ function openTrade(
   params: number[],
   kappa: number,
   rBar: number,
+  topoScore?: number,
 ): void {
   const sizeFrac = params[1]!
   const stop = params[2]!
   const exitPhase = params[3]!
-  const sizeUsd = state.equity * sizeFrac
+
+  const phase = Math.floor(regimeId / 2)
+  const isTurning = phase === 1 || phase === 3
+  const kappaScale = isTurning ? kappaConfidence(kappa) : 1
+  const topoScale = topoScore !== undefined ? topologyConfidence(topoScore) : 1
+  const confScale = kappaScale * topoScale
+  const sizeUsd = state.equity * sizeFrac * confScale
 
   state.position = {
     direction: dir,

@@ -30,9 +30,8 @@ export default defineConfig({
         rewrite: (p) => p.replace(/^\/ws-binance-alt/, '/ws'),
       },
       '/api-binance': {
-        target: 'https://api.binance.com',
+        target: 'https://sbn-app.onrender.com',
         changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/api-binance/, ''),
       },
     },
   },

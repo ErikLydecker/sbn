@@ -6,6 +6,10 @@ export const TRADING_CONFIG = {
   maxTradeHistory: 200,
   maxEquityCurvePoints: 512,
   kappaThreshold: 2.5,
+  kappaFloor: 1.5,
+  kappaPersistenceBars: 3,
+  kappaSigmoidCenter: 2.5,
+  kappaSigmoidSteepness: 2.0,
   minHoldFraction: 0.25,
   minHoldFloor: 4,
   minPhaseAdvance: 0.20,
@@ -35,6 +39,11 @@ export const TRADING_CONFIG = {
     alignment: 0.15,
   },
   lossPenaltyMultiplier: 1.5,
+  topologyFloor: 0.3,
+  topologyCollapseExit: true,
+  topologySigmoidCenter: 0.5,
+  topologySigmoidSteepness: 8,
+  hurstTrendThreshold: 0.55,
 } as const
 
 export type ParamName = (typeof TRADING_CONFIG.paramNames)[number]

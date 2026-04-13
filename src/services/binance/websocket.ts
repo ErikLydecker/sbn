@@ -16,19 +16,22 @@ export function connectBinanceWs(options: WsConnectionOptions): WsHandle {
   const { url, timeoutMs, onPrice, onOpen, onClose, onError } = options
   const ws = new WebSocket(url)
   let _lastMessageAt = 0
+  let disposed = false
 
   const timeout = setTimeout(() => {
-    if (ws.readyState !== WebSocket.OPEN) {
+    if (!disposed && ws.readyState !== WebSocket.OPEN) {
       ws.close()
     }
   }, timeoutMs)
 
-  ws.onopen = () => {
+  ws.addEventListener('open', () => {
+    if (disposed) { ws.close(); return }
     clearTimeout(timeout)
     onOpen()
-  }
+  })
 
-  ws.onmessage = (e: MessageEvent) => {
+  ws.addEventListener('message', (e: MessageEvent) => {
+    if (disposed) return
     _lastMessageAt = Date.now()
     try {
       const data = JSON.parse(e.data as string) as { p?: string }
@@ -37,22 +40,25 @@ export function connectBinanceWs(options: WsConnectionOptions): WsHandle {
     } catch {
       // skip malformed messages
     }
-  }
+  })
 
-  ws.onerror = (e: Event) => {
+  ws.addEventListener('error', (e: Event) => {
+    if (disposed) return
     clearTimeout(timeout)
     onError(e)
-  }
+  })
 
-  ws.onclose = (e: CloseEvent) => {
+  ws.addEventListener('close', (e: CloseEvent) => {
+    if (disposed) return
     clearTimeout(timeout)
     onClose(e.code)
-  }
+  })
 
   return {
     close: () => {
+      disposed = true
       clearTimeout(timeout)
-      ws.close()
+      if (ws.readyState === WebSocket.OPEN) ws.close()
     },
     lastMessageAt: () => _lastMessageAt,
   }

@@ -4,6 +4,7 @@ import type { RegimeId } from '@/schemas/regime'
 import type { GpState } from '@/schemas/portfolio'
 import type { Timeframe } from '@/schemas/settings'
 import type { OhlcBar } from '@/services/ohlc/aggregator'
+import type { TopologyFingerprint, FingerprintMatch, TopologyClass } from '@/core/dsp/topology'
 
 export type WorkerInbound =
   | { type: 'price'; price: number }
@@ -52,11 +53,15 @@ export interface DspTickData {
   hmmPSelf?: number
   barCount?: number
   recurrenceRate?: number
+  fixedRecurrenceRate?: number
   corrDimEstimate?: number
   structureScore?: number
+  subspaceStability?: number
   rawFrequencies?: unknown[]
   goertzelSpectrum?: unknown[]
   trail?: number[]
+  ppc?: number
+  hurst?: number
 }
 
 export interface PolarRoseData {
@@ -71,8 +76,27 @@ export interface VoxelSnapshotData {
   embeddingVecs?: number[][]
   recurrenceSize?: number
   recurrenceRate?: number
+  fixedRecurrenceRate?: number
   corrDimEstimate?: number
   structureScore?: number
+}
+
+export interface TopologyWorkerData {
+  windingNumber: number
+  absWinding: number
+  circulation: number
+  loopClosure: number
+  topologyStability: number
+  topologyScore: number
+  topologyClass: TopologyClass
+  isLoop: boolean
+  fingerprint: TopologyFingerprint
+  matchedFingerprints: FingerprintMatch[]
+}
+
+export interface BarTimingData {
+  lastBarTime: number
+  intervalMs: number
 }
 
 export type WorkerOutbound =
@@ -84,8 +108,10 @@ export type WorkerOutbound =
   | { type: 'dspTick'; data: DspTickData }
   | { type: 'polarRose'; data: PolarRoseData }
   | { type: 'voxelSnapshot'; data: VoxelSnapshotData }
+  | { type: 'topology'; data: TopologyWorkerData }
   | { type: 'barCount'; count: number }
   | { type: 'candles'; bars: OhlcBar[] }
+  | { type: 'barTiming'; data: BarTimingData }
 
 export interface PortfolioWorkerData {
   equity: number

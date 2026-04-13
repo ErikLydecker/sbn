@@ -7,13 +7,17 @@ import { estimateTau } from './tau'
 import { estimateDim } from './embedding'
 import { takensEmbed } from './takens'
 import { takensPhase } from './phase'
+import type { PhaseBasis } from './phase'
 import { pcaProject3 } from './pca3'
 import { computeRecurrence } from './recurrence'
+import { computeTopology, createInitialTopologyState } from './topology'
+import type { TopologyState } from './topology'
 import { vmFilter } from './von-mises'
 import { buildHmmTransition, hmmForward, hmmToClockPos } from './hmm'
 import type { HmmAlpha } from './hmm'
 import { GoertzelBank } from './goertzel'
 import { causalDenoise } from './denoise'
+import { computeHurst } from './hurst'
 import { circDiff } from '@/core/math/circular'
 import { DSP_CONFIG } from '@/config/dsp'
 import { TRADING_CONFIG } from '@/config/trading'
@@ -44,9 +48,18 @@ export interface SmoothClockState {
   consecutiveSoftCorrections: number
   phaseKappaHistory: PhaseKappaEntry[]
   lastRegimeId: number
+  tDomEma: number
+  tDomAccepted: number
+  tDomCandidate: number
+  tDomDwellCount: number
+  frozenTau: number
+  frozenDim: number
+  phaseBasis: PhaseBasis | null
+  topologyState: TopologyState | null
 }
 
 export function createInitialSmoothState(): SmoothClockState {
+  const fallback = DSP_CONFIG.tDom.fallback
   return {
     vmMu: 0,
     vmKappa: 1,
@@ -56,7 +69,7 @@ export function createInitialSmoothState(): SmoothClockState {
     trail: [],
     tau: 4,
     dim: 5,
-    tDom: DSP_CONFIG.tDom.fallback,
+    tDom: fallback,
     hmmA: null,
     hmmTdomA: 0,
     lastTdom: 0,
@@ -65,6 +78,14 @@ export function createInitialSmoothState(): SmoothClockState {
     consecutiveSoftCorrections: 0,
     phaseKappaHistory: [],
     lastRegimeId: -1,
+    tDomEma: fallback,
+    tDomAccepted: fallback,
+    tDomCandidate: fallback,
+    tDomDwellCount: 0,
+    frozenTau: 4,
+    frozenDim: 5,
+    phaseBasis: null,
+    topologyState: null,
   }
 }
 
@@ -128,6 +149,7 @@ export function analyseRaw(
 export function analyseSmooth(
   eventBars: number[],
   state: SmoothClockState,
+  timestamps?: number[],
 ): { result: SmoothAnalysis; state: SmoothClockState } | null {
   const minBars = DSP_CONFIG.minBootstrapBars
   if (eventBars.length < minBars) {
@@ -144,15 +166,12 @@ export function analyseSmooth(
     ? causalDenoise(eventBars, dCfg.levels, dCfg.thresholdMultiplier, dCfg.thresholdLevels)
     : eventBars
 
-  const tDom = estimateTdomCausal(eventBars, cleanBars, state, gCfg)
+  const rawTdom = estimateTdomCausal(eventBars, cleanBars, state, gCfg)
+  gateTdom(state, rawTdom, cleanBars)
 
-  const tauMax = Math.max(1, Math.floor(tDom / 4))
-  const tauFloor = Math.max(DSP_CONFIG.tau.minTau, Math.floor(tDom / 8))
-  const tauSig = normalize(detrend(cleanBars.slice(-Math.min(cleanBars.length, Math.round(2.5 * tDom)))))
-  const tau = Math.max(tauFloor, estimateTau(tauSig, tauMax))
-  const dim = estimateDim(tauSig, tau, 6)
-  const mFromSpan = Math.round(tDom / Math.max(tau, 1)) + 1
-  const m = Math.min(Math.max(mFromSpan, 3), dim, 6)
+  const tDom = state.tDomAccepted
+  const tau = state.frozenTau
+  const m = state.frozenDim
 
   const geomWin = Math.max((m - 1) * tau + 20, Math.round(tDom))
   const geomSig = normalize(detrend(cleanBars.slice(-Math.min(cleanBars.length, geomWin))))
@@ -163,12 +182,16 @@ export function analyseSmooth(
   const phaseSig = normalize(detrend(cleanBars.slice(-Math.min(cleanBars.length, phaseWin))))
   const phaseVecs = takensEmbed(phaseSig, m, tau)
   if (phaseVecs.length < 8) return null
-  const phases = takensPhase(phaseVecs)
-  if (phases.length < 4) return null
+  const phaseResult = takensPhase(phaseVecs, state.phaseBasis)
+  if (phaseResult.phases.length < 4) return null
 
   const vmHorizon = Math.max(2, Math.round(DSP_CONFIG.vonMises.horizonFraction * tDom))
   const lambda = 1 / vmHorizon
-  const { mu, kappa, rBar } = vmFilter(phases, lambda)
+  const { mu, kappa, rBar, ppc } = vmFilter(phaseResult.phases, lambda, tDom)
+
+  const hurstWindow = Math.max(64, Math.round(2 * tDom))
+  const hurstSeries = cleanBars.slice(-Math.min(cleanBars.length, hurstWindow))
+  const hurst = hurstSeries.length >= 16 ? computeHurst(hurstSeries) : 0.5
 
   const maxVizPts = 500
   const vizSmoothLen = Math.max(3, Math.round(tDom / 8))
@@ -188,9 +211,10 @@ export function analyseSmooth(
   newState.vmMu = mu
   newState.vmKappa = kappa
   newState.tDom = tDom
-  newState.lastTdom = tDom
+  newState.lastTdom = rawTdom
   newState.tau = tau
   newState.dim = m
+  newState.phaseBasis = phaseResult.basis
 
   const rebuildPct = DSP_CONFIG.tDom.hmmRebuildPct
   const tDomDrift = newState.hmmTdomA > 0
@@ -226,6 +250,23 @@ export function analyseSmooth(
   const hmmDwell = Math.round(tDom / 4)
   const hmmPSelf = newState.hmmA[0]![0]!
 
+  const structScore = projected.length >= 10 ? computeStructureScore(projected) : 0
+  let topoResult: ReturnType<typeof computeTopology> | undefined
+  if (projected.length >= 10) {
+    topoResult = computeTopology(
+      {
+        pts: projected,
+        corrDim: recResult?.corrDimEstimate ?? 0,
+        recurrenceRate: recResult?.fixedRecurrenceRate ?? 0,
+        structureScore: structScore,
+        kappa,
+        timestamp: timestamps ? timestamps[timestamps.length - 1]! : Date.now(),
+      },
+      newState.topologyState,
+    )
+    newState.topologyState = topoResult.updatedState
+  }
+
   return {
     result: {
       phaseDeg: phDeg,
@@ -238,9 +279,7 @@ export function analyseSmooth(
       hmmAlpha: [...newState.alpha],
       hmmActiveState: maxState,
       tDom,
-      tDomFrac: newState.goertzelBank
-        ? DSP_CONFIG.goertzel.refLength / newState.goertzelBank.peakK().kFrac
-        : undefined,
+      tDomFrac: newState.tDomEma,
       goertzelSpectrum: newState.goertzelBank
         ? newState.goertzelBank.spectrum()
         : undefined,
@@ -266,10 +305,24 @@ export function analyseSmooth(
       recurrenceMatrix: recResult ? Array.from(recResult.matrix) : undefined,
       recurrenceSize: recResult?.size,
       recurrenceRate: recResult?.recurrenceRate,
+      fixedRecurrenceRate: recResult?.fixedRecurrenceRate,
       corrDimEstimate: recResult?.corrDimEstimate,
-      structureScore: projected.length >= 10 ? computeStructureScore(projected) : undefined,
+      structureScore: projected.length >= 10 ? structScore : undefined,
+      subspaceStability: phaseResult.subspaceStability,
       pipelineReturns: eventBars.slice(-256),
       pipelineDenoised: cleanBars.slice(-256),
+      pipelineTimestamps: timestamps?.slice(-256),
+
+      windingNumber: topoResult?.windingNumber,
+      absWinding: topoResult?.absWinding,
+      circulation: topoResult?.circulation,
+      loopClosure: topoResult?.loopClosure,
+      topologyStability: topoResult?.topologyStability,
+      topologyScore: topoResult?.topologyScore,
+      topologyClass: topoResult?.topologyClass,
+
+      ppc,
+      hurst,
     },
     state: newState,
   }
@@ -288,6 +341,64 @@ function logReturns(prices: number[]): number[] {
     out.push(Math.log(prices[i]! / prev))
   }
   return out
+}
+
+/**
+ * Gate raw T_dom through EMA + hysteresis + dwell-time.
+ * Returns true when a new T_dom is accepted (embedding params should be recomputed).
+ */
+function gateTdom(
+  state: SmoothClockState,
+  rawTdom: number,
+  cleanBars: number[],
+): boolean {
+  const cfg = DSP_CONFIG.tDom
+  const alpha = cfg.emaAlpha
+
+  state.tDomEma = state.tDomEma * (1 - alpha) + rawTdom * alpha
+
+  const rounded = Math.round(state.tDomEma)
+  const clamped = Math.max(cfg.minPeriod, Math.min(cfg.maxPeriod, rounded))
+
+  const absDiff = Math.abs(clamped - state.tDomAccepted)
+  const relDiff = state.tDomAccepted > 0
+    ? absDiff / state.tDomAccepted
+    : 1
+
+  const exceedsHysteresis =
+    absDiff >= cfg.hysteresisAbsolute || relDiff >= cfg.hysteresisRelative
+
+  if (!exceedsHysteresis) {
+    state.tDomCandidate = state.tDomAccepted
+    state.tDomDwellCount = 0
+    return false
+  }
+
+  if (clamped === state.tDomCandidate) {
+    state.tDomDwellCount++
+  } else {
+    state.tDomCandidate = clamped
+    state.tDomDwellCount = 1
+  }
+
+  if (state.tDomDwellCount >= cfg.dwellCycles) {
+    state.tDomAccepted = clamped
+    state.tDomDwellCount = 0
+
+    const tauMax = Math.max(1, Math.floor(clamped / 4))
+    const tauFloor = Math.max(DSP_CONFIG.tau.minTau, Math.floor(clamped / 8))
+    const tauSig = normalize(detrend(
+      cleanBars.slice(-Math.min(cleanBars.length, Math.round(2.5 * clamped))),
+    ))
+    state.frozenTau = Math.max(tauFloor, estimateTau(tauSig, tauMax))
+    const dim = estimateDim(tauSig, state.frozenTau, 6)
+    const mFromSpan = Math.round(clamped / Math.max(state.frozenTau, 1)) + 1
+    state.frozenDim = Math.min(Math.max(mFromSpan, 3), dim, 6)
+
+    return true
+  }
+
+  return false
 }
 
 function estimateTdomCausal(
@@ -400,6 +511,8 @@ function createBootstrappingResult(barCount: number, progress: number): SmoothAn
     barCount,
     isBootstrapping: true,
     bootstrapProgress: progress,
+    ppc: 0,
+    hurst: 0.5,
   }
 }
 

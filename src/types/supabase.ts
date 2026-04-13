@@ -7,6 +7,8 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
@@ -14,31 +16,49 @@ export type Database = {
     Tables: {
       coherence_history: {
         Row: {
+          fixed_recurrence_rate: number | null
+          hurst: number | null
           id: number
           kappa: number
+          ppc: number | null
           r_bar: number
           recurrence_rate: number | null
           structure_score: number | null
           t_dom: number | null
           timestamp: number
+          topology_class: string | null
+          topology_score: number | null
+          winding_number: number | null
         }
         Insert: {
+          fixed_recurrence_rate?: number | null
+          hurst?: number | null
           id?: never
           kappa: number
+          ppc?: number | null
           r_bar: number
           recurrence_rate?: number | null
           structure_score?: number | null
           t_dom?: number | null
           timestamp: number
+          topology_class?: string | null
+          topology_score?: number | null
+          winding_number?: number | null
         }
         Update: {
+          fixed_recurrence_rate?: number | null
+          hurst?: number | null
           id?: never
           kappa?: number
+          ppc?: number | null
           r_bar?: number
           recurrence_rate?: number | null
           structure_score?: number | null
           t_dom?: number | null
           timestamp?: number
+          topology_class?: string | null
+          topology_score?: number | null
+          winding_number?: number | null
         }
         Relationships: []
       }
@@ -50,6 +70,7 @@ export type Database = {
           corr_dim_estimate: number | null
           embed_span: number | null
           embedding_dim: number | null
+          fixed_recurrence_rate: number | null
           goertzel_confidence: number | null
           goertzel_dom_k: number | null
           goertzel_spectrum: Json | null
@@ -86,6 +107,7 @@ export type Database = {
           corr_dim_estimate?: number | null
           embed_span?: number | null
           embedding_dim?: number | null
+          fixed_recurrence_rate?: number | null
           goertzel_confidence?: number | null
           goertzel_dom_k?: number | null
           goertzel_spectrum?: Json | null
@@ -122,6 +144,7 @@ export type Database = {
           corr_dim_estimate?: number | null
           embed_span?: number | null
           embedding_dim?: number | null
+          fixed_recurrence_rate?: number | null
           goertzel_confidence?: number | null
           goertzel_dom_k?: number | null
           goertzel_spectrum?: Json | null
@@ -266,14 +289,27 @@ export type Database = {
           alpha: Json
           clock_pos: number
           dim: number
+          event_bars: number[] | null
+          event_timestamps: number[] | null
+          frozen_dim: number
+          frozen_tau: number
+          goertzel_snapshot: Json | null
           hmm_a: Json | null
           hmm_tdom_a: number
           id: string
+          last_close_price: number | null
           last_regime_id: number | null
           last_tdom: number
+          phase_basis_e1: number[] | null
+          phase_basis_e2: number[] | null
           phase_kappa_history: Json
           t_dom: number
+          t_dom_accepted: number
+          t_dom_candidate: number
+          t_dom_dwell_count: number
+          t_dom_ema: number
           tau: number
+          topology_state: Json | null
           trail: Json
           vel: number
           vm_kappa: number
@@ -283,14 +319,27 @@ export type Database = {
           alpha?: Json
           clock_pos?: number
           dim?: number
+          event_bars?: number[] | null
+          event_timestamps?: number[] | null
+          frozen_dim?: number
+          frozen_tau?: number
+          goertzel_snapshot?: Json | null
           hmm_a?: Json | null
           hmm_tdom_a?: number
           id?: string
+          last_close_price?: number | null
           last_regime_id?: number | null
           last_tdom?: number
+          phase_basis_e1?: number[] | null
+          phase_basis_e2?: number[] | null
           phase_kappa_history?: Json
           t_dom?: number
+          t_dom_accepted?: number
+          t_dom_candidate?: number
+          t_dom_dwell_count?: number
+          t_dom_ema?: number
           tau?: number
+          topology_state?: Json | null
           trail?: Json
           vel?: number
           vm_kappa?: number
@@ -300,18 +349,82 @@ export type Database = {
           alpha?: Json
           clock_pos?: number
           dim?: number
+          event_bars?: number[] | null
+          event_timestamps?: number[] | null
+          frozen_dim?: number
+          frozen_tau?: number
+          goertzel_snapshot?: Json | null
           hmm_a?: Json | null
           hmm_tdom_a?: number
           id?: string
+          last_close_price?: number | null
           last_regime_id?: number | null
           last_tdom?: number
+          phase_basis_e1?: number[] | null
+          phase_basis_e2?: number[] | null
           phase_kappa_history?: Json
           t_dom?: number
+          t_dom_accepted?: number
+          t_dom_candidate?: number
+          t_dom_dwell_count?: number
+          t_dom_ema?: number
           tau?: number
+          topology_state?: Json | null
           trail?: Json
           vel?: number
           vm_kappa?: number
           vm_mu?: number
+        }
+        Relationships: []
+      }
+      topology_snapshots: {
+        Row: {
+          abs_winding: number
+          circulation: number
+          corr_dim: number | null
+          created_at: string | null
+          fingerprint_vector: number[]
+          id: number
+          kappa: number | null
+          loop_closure: number
+          recurrence_rate: number | null
+          structure_score: number | null
+          timestamp: number
+          topology_class: string
+          topology_score: number
+          winding_number: number
+        }
+        Insert: {
+          abs_winding: number
+          circulation: number
+          corr_dim?: number | null
+          created_at?: string | null
+          fingerprint_vector: number[]
+          id?: never
+          kappa?: number | null
+          loop_closure: number
+          recurrence_rate?: number | null
+          structure_score?: number | null
+          timestamp: number
+          topology_class: string
+          topology_score: number
+          winding_number: number
+        }
+        Update: {
+          abs_winding?: number
+          circulation?: number
+          corr_dim?: number | null
+          created_at?: string | null
+          fingerprint_vector?: number[]
+          id?: never
+          kappa?: number | null
+          loop_closure?: number
+          recurrence_rate?: number | null
+          structure_score?: number | null
+          timestamp?: number
+          topology_class?: string
+          topology_score?: number
+          winding_number?: number
         }
         Relationships: []
       }
@@ -367,6 +480,7 @@ export type Database = {
         Row: {
           corr_dim_estimate: number | null
           embedding_vecs: Json | null
+          fixed_recurrence_rate: number | null
           id: number
           recurrence_rate: number | null
           recurrence_size: number | null
@@ -376,6 +490,7 @@ export type Database = {
         Insert: {
           corr_dim_estimate?: number | null
           embedding_vecs?: Json | null
+          fixed_recurrence_rate?: number | null
           id?: never
           recurrence_rate?: number | null
           recurrence_size?: number | null
@@ -385,6 +500,7 @@ export type Database = {
         Update: {
           corr_dim_estimate?: number | null
           embedding_vecs?: Json | null
+          fixed_recurrence_rate?: number | null
           id?: never
           recurrence_rate?: number | null
           recurrence_size?: number | null

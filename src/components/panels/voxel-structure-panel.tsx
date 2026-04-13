@@ -5,6 +5,7 @@ import {
   AccordionTrigger,
   AccordionContent,
 } from '@/components/ui/accordion'
+import { computeShapeMetrics, type ShapeMetrics } from '@/core/dsp/shape-metrics'
 
 interface VoxelStructurePanelProps {
   pts: number[][]
@@ -12,7 +13,7 @@ interface VoxelStructurePanelProps {
 
 const GRID = 20
 
-interface VoxelMetrics {
+interface VoxelGridStats {
   occupancy: number
   totalVoxels: number
   occupied: number
@@ -20,17 +21,16 @@ interface VoxelMetrics {
   meanDensity: number
   centroid: [number, number, number]
   spread: [number, number, number]
-  radialShells: { r: number; count: number; fraction: number }[]
-  axisAsymmetry: [number, number, number]
-  densityEntropy: number
-  lacunarity: number
   gyrationRadius: number
-  principalExtents: [number, number, number]
-  clusterCompactness: number
-  hollowness: number
 }
 
-function computeMetrics(pts: number[][]): VoxelMetrics | null {
+interface VoxelMetrics {
+  grid: VoxelGridStats
+  shape: ShapeMetrics
+  radialShellsDetailed: { r: number; count: number; fraction: number }[]
+}
+
+function computeGridStats(pts: number[][]): VoxelGridStats | null {
   if (pts.length < 4) return null
 
   const minV: [number, number, number] = [Infinity, Infinity, Infinity]
@@ -111,81 +111,6 @@ function computeMetrics(pts: number[][]): VoxelMetrics | null {
 
   const gyrationRadius = Math.sqrt(variance[0] + variance[1] + variance[2])
 
-  const sortedVar = [variance[0], variance[1], variance[2]].sort((a, b) => b - a)
-  const principalExtents: [number, number, number] = [
-    Math.sqrt(sortedVar[0]!),
-    Math.sqrt(sortedVar[1]!),
-    Math.sqrt(sortedVar[2]!),
-  ]
-
-  const NUM_SHELLS = 6
-  const shellCounts = new Array(NUM_SHELLS).fill(0) as number[]
-  const maxR = Math.sqrt(3) * 0.5
-  for (let ix = 0; ix < GRID; ix++) {
-    for (let iy = 0; iy < GRID; iy++) {
-      for (let iz = 0; iz < GRID; iz++) {
-        const d = grid[ix * GRID * GRID + iy * GRID + iz]!
-        if (d < 1) continue
-        const r = Math.sqrt(
-          ((ix + 0.5) / GRID - cx[0]) ** 2 +
-          ((iy + 0.5) / GRID - cx[1]) ** 2 +
-          ((iz + 0.5) / GRID - cx[2]) ** 2,
-        )
-        const shell = Math.min(NUM_SHELLS - 1, Math.floor((r / maxR) * NUM_SHELLS))
-        shellCounts[shell] = shellCounts[shell]! + d
-      }
-    }
-  }
-  const shellTotal = shellCounts.reduce((a, b) => a + b, 0) || 1
-  const radialShells = shellCounts.map((c, i) => ({
-    r: ((i + 0.5) / NUM_SHELLS) * maxR,
-    count: c,
-    fraction: c / shellTotal,
-  }))
-
-  const innerShellFraction = radialShells.length > 0 ? radialShells[0]!.fraction : 0
-  const outerShellFraction = radialShells.length > 0 ? radialShells[radialShells.length - 1]!.fraction : 0
-  const hollowness = occupied > 0
-    ? Math.max(0, 1 - innerShellFraction / (outerShellFraction || 0.001))
-    : 0
-
-  const axisPos: [number, number, number] = [0, 0, 0]
-  const axisNeg: [number, number, number] = [0, 0, 0]
-  for (let ix = 0; ix < GRID; ix++) {
-    for (let iy = 0; iy < GRID; iy++) {
-      for (let iz = 0; iz < GRID; iz++) {
-        const d = grid[ix * GRID * GRID + iy * GRID + iz]!
-        if (d < 1) continue
-        const px = (ix + 0.5) / GRID
-        const py = (iy + 0.5) / GRID
-        const pz = (iz + 0.5) / GRID
-        px >= cx[0] ? (axisPos[0] += d) : (axisNeg[0] += d)
-        py >= cx[1] ? (axisPos[1] += d) : (axisNeg[1] += d)
-        pz >= cx[2] ? (axisPos[2] += d) : (axisNeg[2] += d)
-      }
-    }
-  }
-  const axisAsymmetry: [number, number, number] = [
-    (axisPos[0] + axisNeg[0]) > 0 ? Math.abs(axisPos[0] - axisNeg[0]) / (axisPos[0] + axisNeg[0]) : 0,
-    (axisPos[1] + axisNeg[1]) > 0 ? Math.abs(axisPos[1] - axisNeg[1]) / (axisPos[1] + axisNeg[1]) : 0,
-    (axisPos[2] + axisNeg[2]) > 0 ? Math.abs(axisPos[2] - axisNeg[2]) / (axisPos[2] + axisNeg[2]) : 0,
-  ]
-
-  let densityEntropy = 0
-  for (let i = 0; i < grid.length; i++) {
-    if (grid[i]! > 0) {
-      const p = grid[i]! / totalW
-      densityEntropy -= p * Math.log2(p)
-    }
-  }
-
-  const densities = Array.from(grid).filter((d) => d > 0)
-  const mean2 = densities.reduce((a, b) => a + b, 0) / densities.length
-  const variance2 = densities.reduce((a, b) => a + (b - mean2) ** 2, 0) / densities.length
-  const lacunarity = mean2 > 0 ? variance2 / (mean2 * mean2) : 0
-
-  const clusterCompactness = occupancy > 0 ? occupancy / (gyrationRadius || 0.001) : 0
-
   return {
     occupancy,
     totalVoxels,
@@ -194,15 +119,26 @@ function computeMetrics(pts: number[][]): VoxelMetrics | null {
     meanDensity,
     centroid,
     spread,
-    radialShells,
-    axisAsymmetry,
-    densityEntropy,
-    lacunarity,
     gyrationRadius,
-    principalExtents,
-    clusterCompactness,
-    hollowness,
   }
+}
+
+function computeMetrics(pts: number[][]): VoxelMetrics | null {
+  const gridStats = computeGridStats(pts)
+  if (!gridStats) return null
+
+  const shape = computeShapeMetrics(pts, Date.now())
+  if (!shape) return null
+
+  const NUM_SHELLS = 6
+  const maxR = Math.sqrt(3) * 0.5
+  const radialShellsDetailed = shape.radialShells.map((fraction, i) => ({
+    r: ((i + 0.5) / NUM_SHELLS) * maxR,
+    count: 0,
+    fraction,
+  }))
+
+  return { grid: gridStats, shape, radialShellsDetailed }
 }
 
 function fmt(v: number, decimals = 3): string {
@@ -236,12 +172,8 @@ export const VoxelStructurePanel = memo(function VoxelStructurePanel({ pts }: Vo
     )
   }
 
-  const maxShellFrac = Math.max(...metrics.radialShells.map((s) => s.fraction))
-
-  const symmetryScore = 1 - (metrics.axisAsymmetry[0] + metrics.axisAsymmetry[1] + metrics.axisAsymmetry[2]) / 3
-  const anisotropy = metrics.principalExtents[0] > 0
-    ? 1 - metrics.principalExtents[2] / metrics.principalExtents[0]
-    : 0
+  const { grid: g, shape: s, radialShellsDetailed } = metrics
+  const maxShellFrac = Math.max(...radialShellsDetailed.map((sh) => sh.fraction))
 
   return (
     <Accordion type="multiple" defaultValue={['occupancy']}>
@@ -250,10 +182,10 @@ export const VoxelStructurePanel = memo(function VoxelStructurePanel({ pts }: Vo
         <AccordionContent>
           <Desc>How many voxels in the 20\u00b3 grid contain attractor points, and how unevenly mass concentrates across occupied cells.</Desc>
           <div className="space-y-1">
-            <MetricRow label="Occupied" value={`${metrics.occupied} / ${metrics.totalVoxels}`} />
-            <MetricRow label="Fill ratio" value={`${(metrics.occupancy * 100).toFixed(1)}%`} />
-            <MetricRow label="Peak density" value={`${metrics.maxDensity}`} accent />
-            <MetricRow label="Mean density" value={fmt(metrics.meanDensity, 1)} />
+            <MetricRow label="Occupied" value={`${g.occupied} / ${g.totalVoxels}`} />
+            <MetricRow label="Fill ratio" value={`${(g.occupancy * 100).toFixed(1)}%`} />
+            <MetricRow label="Peak density" value={`${g.maxDensity}`} accent />
+            <MetricRow label="Mean density" value={fmt(g.meanDensity, 1)} />
           </div>
         </AccordionContent>
       </AccordionItem>
@@ -263,9 +195,9 @@ export const VoxelStructurePanel = memo(function VoxelStructurePanel({ pts }: Vo
         <AccordionContent>
           <Desc>Mass-weighted center of the attractor in normalized embedding coordinates. Values near 0.5 indicate a centered distribution.</Desc>
           <div className="space-y-1">
-            <MetricRow label="X" value={fmt(metrics.centroid[0])} />
-            <MetricRow label="Y" value={fmt(metrics.centroid[1])} />
-            <MetricRow label="Z" value={fmt(metrics.centroid[2])} />
+            <MetricRow label="X" value={fmt(g.centroid[0])} />
+            <MetricRow label="Y" value={fmt(g.centroid[1])} />
+            <MetricRow label="Z" value={fmt(g.centroid[2])} />
           </div>
         </AccordionContent>
       </AccordionItem>
@@ -275,10 +207,10 @@ export const VoxelStructurePanel = memo(function VoxelStructurePanel({ pts }: Vo
         <AccordionContent>
           <Desc>Per-axis standard deviation of density mass. The radius of gyration R_gyr measures the overall spatial extent of the attractor cloud.</Desc>
           <div className="space-y-1">
-            <MetricRow label="\u03C3_x" value={fmt(metrics.spread[0])} />
-            <MetricRow label="\u03C3_y" value={fmt(metrics.spread[1])} />
-            <MetricRow label="\u03C3_z" value={fmt(metrics.spread[2])} />
-            <MetricRow label="R_gyr" value={fmt(metrics.gyrationRadius)} accent />
+            <MetricRow label="\u03C3_x" value={fmt(g.spread[0])} />
+            <MetricRow label="\u03C3_y" value={fmt(g.spread[1])} />
+            <MetricRow label="\u03C3_z" value={fmt(g.spread[2])} />
+            <MetricRow label="R_gyr" value={fmt(g.gyrationRadius)} accent />
           </div>
         </AccordionContent>
       </AccordionItem>
@@ -288,7 +220,7 @@ export const VoxelStructurePanel = memo(function VoxelStructurePanel({ pts }: Vo
         <AccordionContent>
           <Desc>Mass fraction in concentric shells from the density centroid. Reveals whether the attractor is core-heavy, hollow, or uniformly distributed.</Desc>
           <div className="space-y-1">
-            {metrics.radialShells.map((shell, i) => (
+            {radialShellsDetailed.map((shell, i) => (
               <ShellBar key={i} shell={shell} maxFraction={maxShellFrac} />
             ))}
           </div>
@@ -300,10 +232,10 @@ export const VoxelStructurePanel = memo(function VoxelStructurePanel({ pts }: Vo
         <AccordionContent>
           <Desc>Composite measures that reveal the attractor's hidden shape: rotational symmetry, directional elongation, shell hollowness, and packing density.</Desc>
           <div className="space-y-1">
-            <MetricRow label="Symmetry" value={fmt(symmetryScore, 2)} accent color={symmetryColor(symmetryScore)} />
-            <MetricRow label="Anisotropy" value={fmt(anisotropy, 3)} />
-            <MetricRow label="Hollowness" value={fmt(metrics.hollowness, 3)} />
-            <MetricRow label="Compactness" value={fmt(metrics.clusterCompactness, 3)} />
+            <MetricRow label="Symmetry" value={fmt(s.symmetry, 2)} accent color={symmetryColor(s.symmetry)} />
+            <MetricRow label="Anisotropy" value={fmt(s.anisotropy, 3)} />
+            <MetricRow label="Hollowness" value={fmt(s.hollowness, 3)} />
+            <MetricRow label="Compactness" value={fmt(s.compactness, 3)} />
           </div>
         </AccordionContent>
       </AccordionItem>
@@ -313,11 +245,11 @@ export const VoxelStructurePanel = memo(function VoxelStructurePanel({ pts }: Vo
         <AccordionContent>
           <Desc>Shannon entropy of the voxel density distribution and lacunarity (gap texture). Low entropy signals the attractor collapses onto a low-dimensional manifold.</Desc>
           <div className="space-y-1">
-            <MetricRow label="Density entropy" value={`${fmt(metrics.densityEntropy, 2)} bits`} accent />
-            <MetricRow label="Lacunarity (\u039B)" value={fmt(metrics.lacunarity, 3)} />
+            <MetricRow label="Density entropy" value={`${fmt(s.densityEntropy, 2)} bits`} accent />
+            <MetricRow label="Lacunarity (\u039B)" value={fmt(s.lacunarity, 3)} />
           </div>
           <p className="mt-1.5 text-[9px] leading-relaxed text-[#4a4d54]">
-            {interpretEntropy(metrics.densityEntropy, Math.log2(metrics.occupied))}
+            {interpretEntropy(s.densityEntropy, Math.log2(g.occupied))}
           </p>
         </AccordionContent>
       </AccordionItem>
@@ -327,12 +259,12 @@ export const VoxelStructurePanel = memo(function VoxelStructurePanel({ pts }: Vo
         <AccordionContent>
           <Desc>Fractional mass imbalance across each embedding axis. High values expose directional bias in the attractor's structure.</Desc>
           <div className="space-y-1">
-            <MetricRow label="X asym" value={fmt(metrics.axisAsymmetry[0], 3)} />
-            <MetricRow label="Y asym" value={fmt(metrics.axisAsymmetry[1], 3)} />
-            <MetricRow label="Z asym" value={fmt(metrics.axisAsymmetry[2], 3)} />
+            <MetricRow label="X asym" value={fmt(s.axisAsymmetry[0], 3)} />
+            <MetricRow label="Y asym" value={fmt(s.axisAsymmetry[1], 3)} />
+            <MetricRow label="Z asym" value={fmt(s.axisAsymmetry[2], 3)} />
           </div>
           <p className="mt-1.5 text-[9px] leading-relaxed text-[#4a4d54]">
-            {interpretAsymmetry(metrics.axisAsymmetry)}
+            {interpretAsymmetry(s.axisAsymmetry)}
           </p>
         </AccordionContent>
       </AccordionItem>
@@ -342,12 +274,12 @@ export const VoxelStructurePanel = memo(function VoxelStructurePanel({ pts }: Vo
         <AccordionContent>
           <Desc>Eigenvalue-ordered spread along the three principal axes. Their ratios classify the attractor as spherical, oblate, prolate, or triaxial.</Desc>
           <div className="space-y-1">
-            <MetricRow label="\u03BB\u2081" value={fmt(metrics.principalExtents[0])} accent />
-            <MetricRow label="\u03BB\u2082" value={fmt(metrics.principalExtents[1])} />
-            <MetricRow label="\u03BB\u2083" value={fmt(metrics.principalExtents[2])} />
+            <MetricRow label="\u03BB\u2081" value={fmt(s.principalExtents[0])} accent />
+            <MetricRow label="\u03BB\u2082" value={fmt(s.principalExtents[1])} />
+            <MetricRow label="\u03BB\u2083" value={fmt(s.principalExtents[2])} />
           </div>
           <p className="mt-1.5 text-[9px] leading-relaxed text-[#4a4d54]">
-            {interpretShape(metrics.principalExtents)}
+            {interpretShape(s.principalExtents)}
           </p>
         </AccordionContent>
       </AccordionItem>

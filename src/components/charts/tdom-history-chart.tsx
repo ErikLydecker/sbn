@@ -4,10 +4,12 @@ import type { CoherencePoint } from '@/services/persistence/db'
 
 interface TdomHistoryChartProps {
   points: CoherencePoint[]
+  visibleRangeMinutes?: number
 }
 
 export const TdomHistoryChart = memo(function TdomHistoryChart({
   points,
+  visibleRangeMinutes,
 }: TdomHistoryChartProps) {
   return (
     <MetricsHistoryChart
@@ -16,6 +18,7 @@ export const TdomHistoryChart = memo(function TdomHistoryChart({
       color="#d0d6e0"
       label="T_DOM"
       formatValue={(v: number) => `${v.toFixed(0)} bars`}
+      visibleRangeMinutes={visibleRangeMinutes}
     />
   )
 })

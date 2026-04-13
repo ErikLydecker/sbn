@@ -11,8 +11,10 @@ export interface RecurrenceResult {
   matrix: Uint8Array
   /** Side length of the square matrix */
   size: number
-  /** Fraction of off-diagonal recurrence points */
+  /** Fraction of off-diagonal recurrence points (percentile-based epsilon) */
   recurrenceRate: number
+  /** Fixed-scale RR: epsilon = fraction of max pairwise distance — free to vary with attractor clustering */
+  fixedRecurrenceRate: number
   /** Estimated correlation dimension (slope of log C(eps) vs log eps) */
   corrDimEstimate: number
 }
@@ -20,20 +22,27 @@ export interface RecurrenceResult {
 /**
  * Compute recurrence analysis from 3D-projected embedding vectors.
  * @param pts  Array of [x, y, z] points (already PCA-projected)
- * @param epsilonPct  Recurrence threshold as fraction of attractor diameter (default 0.1)
+ * @param epsilonPct  Percentile of pairwise distances used as recurrence threshold (default 0.1 = 10th percentile).
+ *   Using a fixed percentile rather than a fraction of the diameter makes the
+ *   threshold robust to changes in attractor scale/embedding dimension (Marwan et al. 2007).
+ */
+/**
+ * @param fixedEpsilonFrac  Fraction of maximum pairwise distance for the fixed-scale RR (default 0.10).
+ *   Zbilut & Webber (1992) recommend 10-20% of max distance.
  */
 export function computeRecurrence(
   pts: number[][],
   epsilonPct = 0.1,
+  fixedEpsilonFrac = 0.10,
 ): RecurrenceResult {
   const n = pts.length
   if (n < 4) {
-    return { matrix: new Uint8Array(0), size: 0, recurrenceRate: 0, corrDimEstimate: 0 }
+    return { matrix: new Uint8Array(0), size: 0, recurrenceRate: 0, fixedRecurrenceRate: 0, corrDimEstimate: 0 }
   }
 
   const dists = computeDistanceMatrix(pts, n)
   const maxDist = dists.reduce((mx, d) => Math.max(mx, d), 0)
-  const epsilon = maxDist * epsilonPct
+  const epsilon = percentileDistance(dists, n, epsilonPct)
 
   const matrix = new Uint8Array(n * n)
   let recCount = 0
@@ -52,9 +61,18 @@ export function computeRecurrence(
   const offDiagTotal = n * n - n
   const recurrenceRate = offDiagTotal > 0 ? recCount / offDiagTotal : 0
 
+  const fixedEps = maxDist * fixedEpsilonFrac
+  let fixedCount = 0
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (dists[i * n + j]! < fixedEps) fixedCount++
+    }
+  }
+  const fixedRecurrenceRate = offDiagTotal > 0 ? (fixedCount * 2) / offDiagTotal : 0
+
   const corrDimEstimate = estimateCorrelationDimension(dists, n, maxDist)
 
-  return { matrix, size: n, recurrenceRate, corrDimEstimate }
+  return { matrix, size: n, recurrenceRate, fixedRecurrenceRate, corrDimEstimate }
 }
 
 function computeDistanceMatrix(pts: number[][], n: number): Float32Array {
@@ -74,6 +92,16 @@ function computeDistanceMatrix(pts: number[][], n: number): Float32Array {
     }
   }
   return dists
+}
+
+function percentileDistance(dists: Float32Array, n: number, pct: number): number {
+  const pairs: number[] = []
+  for (let i = 0; i < n; i++)
+    for (let j = i + 1; j < n; j++)
+      pairs.push(dists[i * n + j]!)
+  if (pairs.length === 0) return 0
+  pairs.sort((a, b) => a - b)
+  return pairs[Math.floor(pairs.length * pct)] ?? pairs[pairs.length - 1]!
 }
 
 /**

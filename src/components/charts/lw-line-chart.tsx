@@ -6,10 +6,11 @@ import {
   type ISeriesApi,
   type LineData,
   type Time,
-  ColorType,
   LineType,
   LastPriceAnimationMode,
 } from 'lightweight-charts'
+import { chartOptions } from './chart-defaults'
+import { getVisibleRange } from '@/stores/chart-timeframe.store'
 
 export interface LwLinePoint {
   time: number
@@ -24,6 +25,7 @@ interface LwLineChartProps {
   areaBottomColor?: string
   precision?: number
   formatValue?: (v: number) => string
+  visibleRangeMinutes?: number
 }
 
 export const LwLineChart = memo(function LwLineChart({
@@ -34,6 +36,7 @@ export const LwLineChart = memo(function LwLineChart({
   areaBottomColor = 'rgba(113,112,255,0.0)',
   precision = 2,
   formatValue,
+  visibleRangeMinutes,
 }: LwLineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -43,28 +46,10 @@ export const LwLineChart = memo(function LwLineChart({
     const el = containerRef.current
     if (!el) return
 
-    const chart = createChart(el, {
+    const chart = createChart(el, chartOptions({
       width: el.clientWidth,
       height,
-      layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: '#62666d',
-        fontSize: 10,
-        fontFamily: "'SF Mono', 'Fira Code', monospace",
-      },
-      grid: {
-        vertLines: { color: 'rgba(255,255,255,0.03)' },
-        horzLines: { color: 'rgba(255,255,255,0.03)' },
-      },
-      crosshair: {
-        vertLine: { color: 'rgba(113,112,255,0.3)', labelBackgroundColor: '#7170ff' },
-        horzLine: { color: 'rgba(113,112,255,0.3)', labelBackgroundColor: '#7170ff' },
-      },
-      rightPriceScale: {
-        borderColor: 'rgba(255,255,255,0.06)',
-      },
       timeScale: {
-        borderColor: 'rgba(255,255,255,0.06)',
         visible: true,
         timeVisible: true,
         secondsVisible: false,
@@ -73,14 +58,13 @@ export const LwLineChart = memo(function LwLineChart({
         mouseWheel: true,
         pressedMouseMove: true,
         horzTouchDrag: true,
-        vertTouchDrag: false,
       },
       handleScale: {
         mouseWheel: true,
         pinch: true,
         axisPressedMouseMove: true,
       },
-    })
+    }))
 
     const series = chart.addSeries(LineSeries, {
       color: lineColor,
@@ -118,16 +102,24 @@ export const LwLineChart = memo(function LwLineChart({
   useEffect(() => {
     const series = seriesRef.current
     if (!series || data.length < 1) return
-    const chartData: LineData<Time>[] = data.map((d) => ({
-      time: d.time as Time,
-      value: d.value,
-    }))
+    const chartData: LineData<Time>[] = []
+    for (const d of data) {
+      const t = d.time as Time
+      if (chartData.length > 0 && chartData[chartData.length - 1]!.time === t) {
+        chartData[chartData.length - 1] = { time: t, value: d.value }
+      } else {
+        chartData.push({ time: t, value: d.value })
+      }
+    }
     series.setData(chartData)
-    if (!fittedRef.current) {
+    if (visibleRangeMinutes) {
+      const vr = getVisibleRange(visibleRangeMinutes)
+      chartRef.current?.timeScale().setVisibleRange({ from: vr.from as Time, to: vr.to as Time })
+    } else if (!fittedRef.current) {
       chartRef.current?.timeScale().fitContent()
       fittedRef.current = true
     }
-  }, [data])
+  }, [data, visibleRangeMinutes])
 
   return (
     <div

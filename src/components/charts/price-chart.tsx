@@ -1,22 +1,26 @@
-import { useRef, useEffect, memo } from 'react'
-import { createChart, CandlestickSeries, type IChartApi, type ISeriesApi, type CandlestickData, type Time, ColorType } from 'lightweight-charts'
+import { useRef, useEffect } from 'react'
+import { createChart, CandlestickSeries, type IChartApi, type ISeriesApi, type CandlestickData, type Time } from 'lightweight-charts'
+import { chartOptions } from './chart-defaults'
+import { BarTimerOverlay } from './bar-timer-overlay'
+import { usePriceStore } from '@/stores/price.store'
+import { getVisibleRange } from '@/stores/chart-timeframe.store'
 import type { OhlcBar } from '@/services/ohlc/aggregator'
 
-interface PriceChartProps {
-  candles: OhlcBar[]
-}
-
 function toChartData(bars: OhlcBar[]): CandlestickData<Time>[] {
-  return bars.map((b) => ({
-    time: (Math.floor(b.time / 1000)) as Time,
-    open: b.open,
-    high: b.high,
-    low: b.low,
-    close: b.close,
-  }))
+  const out: CandlestickData<Time>[] = []
+  for (const b of bars) {
+    const t = Math.floor(b.time / 1000) as Time
+    if (out.length > 0 && out[out.length - 1]!.time === t) {
+      out[out.length - 1] = { time: t, open: b.open, high: b.high, low: b.low, close: b.close }
+    } else {
+      out.push({ time: t, open: b.open, high: b.high, low: b.low, close: b.close })
+    }
+  }
+  return out
 }
 
-export const PriceChart = memo(function PriceChart({ candles }: PriceChartProps) {
+export function PriceChart({ visibleRangeMinutes }: { visibleRangeMinutes?: number } = {}) {
+  const candles = usePriceStore((s) => s.candles)
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -25,33 +29,14 @@ export const PriceChart = memo(function PriceChart({ candles }: PriceChartProps)
     const el = containerRef.current
     if (!el) return
 
-    const chart = createChart(el, {
+    const chart = createChart(el, chartOptions({
       width: el.clientWidth,
       height: 260,
-      layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: '#62666d',
-        fontSize: 10,
-        fontFamily: "'SF Mono', 'Fira Code', monospace",
-      },
-      grid: {
-        vertLines: { color: 'rgba(255,255,255,0.03)' },
-        horzLines: { color: 'rgba(255,255,255,0.03)' },
-      },
-      crosshair: {
-        vertLine: { color: 'rgba(113,112,255,0.3)', labelBackgroundColor: '#7170ff' },
-        horzLine: { color: 'rgba(113,112,255,0.3)', labelBackgroundColor: '#7170ff' },
-      },
-      rightPriceScale: {
-        borderColor: 'rgba(255,255,255,0.06)',
-      },
       timeScale: {
-        borderColor: 'rgba(255,255,255,0.06)',
         timeVisible: true,
         secondsVisible: true,
       },
-      handleScroll: { vertTouchDrag: false },
-    })
+    }))
 
     const series = chart.addSeries(CandlestickSeries, {
       upColor: '#7170ff',
@@ -88,8 +73,13 @@ export const PriceChart = memo(function PriceChart({ candles }: PriceChartProps)
     if (!series || !chart || !el || candles.length < 1) return
     series.setData(toChartData(candles))
     chart.resize(el.clientWidth, 260, true)
-    chart.timeScale().fitContent()
-  }, [candles])
+    if (visibleRangeMinutes) {
+      const vr = getVisibleRange(visibleRangeMinutes)
+      chart.timeScale().setVisibleRange({ from: vr.from as Time, to: vr.to as Time })
+    } else {
+      chart.timeScale().fitContent()
+    }
+  }, [candles, visibleRangeMinutes])
 
   const closes = candles.map((c) => c.close)
   const latest = closes.length > 0 ? closes[closes.length - 1]! : null
@@ -119,11 +109,14 @@ export const PriceChart = memo(function PriceChart({ candles }: PriceChartProps)
           <span className="text-[#8a8f98]">{candles.length}</span>
         </span>
       </div>
-      <div
-        ref={containerRef}
-        className="w-full rounded-lg"
-        style={{ minHeight: 260 }}
-      />
+      <div className="relative">
+        <div
+          ref={containerRef}
+          className="w-full rounded-lg"
+          style={{ minHeight: 260 }}
+        />
+        <BarTimerOverlay />
+      </div>
     </div>
   )
-})
+}

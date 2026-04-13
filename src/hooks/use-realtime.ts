@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useCoherenceHistoryStore } from '@/stores/coherence-history.store'
 import { usePriceSeriesStore } from '@/stores/price-series.store'
@@ -6,59 +6,74 @@ import { useDspTicksStore } from '@/stores/dsp-ticks.store'
 import { usePolarRoseStore } from '@/stores/polar-rose.store'
 import { useVoxelStore } from '@/stores/voxel.store'
 import { usePortfolioStore } from '@/stores/portfolio.store'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import { useTopologyStore } from '@/stores/topology.store'
+import { computeShapeMetrics } from '@/core/dsp/shape-metrics'
 
+/**
+ * Seed stores from persisted DB data on mount.
+ *
+ * Live data flows exclusively through the DSP worker → stores path.
+ * We intentionally do NOT subscribe to Supabase Realtime INSERT events
+ * because the worker already pushes each data point to stores immediately;
+ * a realtime subscription would duplicate every point when the 10-second
+ * DB flush fires, causing batch re-renders (visible as chart flickering).
+ */
 export function useRealtimeSubscriptions() {
-  const channelRef = useRef<RealtimeChannel | null>(null)
-
-  const pushCoherence = useCoherenceHistoryStore((s) => s.push)
   const loadCoherence = useCoherenceHistoryStore((s) => s.load)
   const coherenceLoaded = useCoherenceHistoryStore((s) => s.loaded)
-  const pushPriceTick = usePriceSeriesStore((s) => s.push)
   const loadPriceSeries = usePriceSeriesStore((s) => s.load)
-  const pushDspTick = useDspTicksStore((s) => s.push)
   const loadDspTicks = useDspTicksStore((s) => s.load)
-  const pushPolarRose = usePolarRoseStore((s) => s.push)
   const loadPolarRose = usePolarRoseStore((s) => s.load)
-  const pushVoxel = useVoxelStore((s) => s.push)
   const loadVoxel = useVoxelStore((s) => s.load)
   const updatePortfolio = usePortfolioStore((s) => s.updateFromWorker)
+  const loadTopology = useTopologyStore((s) => s.load)
+  const topologyLoaded = useTopologyStore((s) => s.loaded)
+  const loadShapes = useTopologyStore((s) => s.loadShapes)
 
   useEffect(() => {
     let cancelled = false
 
     async function seedStores() {
-      const [coherenceRes, priceRes, dspRes, polarRes, voxelRes, portfolioRes, tradesRes] = await Promise.all([
-        supabase.from('coherence_history').select('*').order('timestamp', { ascending: true }).limit(2000),
-        supabase.from('price_series').select('*').order('timestamp', { ascending: true }).limit(2000),
-        supabase.from('dsp_ticks').select('*').order('timestamp', { ascending: true }).limit(500),
-        supabase.from('polar_rose').select('*').order('timestamp', { ascending: true }).limit(3000),
+      const [coherenceRes, priceRes, dspRes, polarRes, voxelRes, portfolioRes, tradesRes, topologyRes, shapeVoxelRes] = await Promise.all([
+        supabase.from('coherence_history').select('*').order('timestamp', { ascending: false }).limit(2000),
+        supabase.from('price_series').select('*').order('timestamp', { ascending: false }).limit(2000),
+        supabase.from('dsp_ticks').select('*').order('timestamp', { ascending: false }).limit(500),
+        supabase.from('polar_rose').select('*').order('timestamp', { ascending: false }).limit(3000),
         supabase.from('voxel_snapshots').select('*').order('timestamp', { ascending: false }).limit(1),
         supabase.from('portfolio').select('*').eq('id', 'current').maybeSingle(),
         supabase.from('trades').select('*').order('timestamp', { ascending: true }),
+        supabase.from('topology_snapshots').select('*').order('timestamp', { ascending: false }).limit(500),
+        supabase.from('voxel_snapshots').select('timestamp,embedding_vecs').not('embedding_vecs', 'is', null).order('timestamp', { ascending: false }).limit(30),
       ])
       if (cancelled) return
 
       if (coherenceRes.data && !coherenceLoaded) {
-        loadCoherence(coherenceRes.data.map((r) => ({
+        loadCoherence(coherenceRes.data.reverse().map((r) => ({
           id: r.id, timestamp: r.timestamp, rBar: r.r_bar, kappa: r.kappa,
-          recurrenceRate: r.recurrence_rate ?? undefined, structureScore: r.structure_score ?? undefined,
+          recurrenceRate: r.recurrence_rate ?? undefined,
+          fixedRecurrenceRate: r.fixed_recurrence_rate ?? undefined,
+          structureScore: r.structure_score ?? undefined,
           tDom: r.t_dom ?? undefined,
+          windingNumber: r.winding_number ?? undefined,
+          topologyScore: r.topology_score ?? undefined,
+          topologyClass: r.topology_class ?? undefined,
+          ppc: r.ppc ?? undefined,
+          hurst: r.hurst ?? undefined,
         })))
       }
 
       if (priceRes.data) {
-        loadPriceSeries(priceRes.data.map((r) => ({
+        loadPriceSeries(priceRes.data.reverse().map((r) => ({
           timestamp: r.timestamp, price: r.price, logReturn: r.log_return, denoisedReturn: r.denoised_return,
         })))
       }
 
       if (dspRes.data) {
-        loadDspTicks(dspRes.data.map(mapDspRow))
+        loadDspTicks(dspRes.data.reverse().map(mapDspRow))
       }
 
       if (polarRes.data) {
-        loadPolarRose(polarRes.data.map((r) => ({
+        loadPolarRose(polarRes.data.reverse().map((r) => ({
           timestamp: r.timestamp, phase: r.phase, kappa: r.kappa, regimeId: r.regime_id,
         })))
       }
@@ -70,9 +85,40 @@ export function useRealtimeSubscriptions() {
           embeddingVecs: r.embedding_vecs as number[][] | undefined,
           recurrenceSize: r.recurrence_size ?? undefined,
           recurrenceRate: r.recurrence_rate ?? undefined,
+          fixedRecurrenceRate: r.fixed_recurrence_rate ?? undefined,
           corrDimEstimate: r.corr_dim_estimate ?? undefined,
           structureScore: r.structure_score ?? undefined,
         })
+      }
+
+      if (topologyRes.data && !topologyLoaded) {
+        loadTopology(topologyRes.data.reverse().map((r: Record<string, unknown>) => ({
+          id: r.id as number,
+          timestamp: r.timestamp as number,
+          windingNumber: r.winding_number as number,
+          absWinding: r.abs_winding as number,
+          circulation: r.circulation as number,
+          loopClosure: r.loop_closure as number,
+          corrDim: (r.corr_dim as number) ?? 0,
+          recurrenceRate: (r.recurrence_rate as number) ?? 0,
+          structureScore: (r.structure_score as number) ?? 0,
+          topologyClass: r.topology_class as string,
+          topologyScore: r.topology_score as number,
+          kappa: (r.kappa as number) ?? 0,
+          fingerprintVector: (r.fingerprint_vector as number[]) ?? [],
+        })))
+      }
+
+      if (shapeVoxelRes.data && shapeVoxelRes.data.length > 0) {
+        const shapes = shapeVoxelRes.data
+          .reverse()
+          .map((r) => {
+            const vecs = r.embedding_vecs as number[][] | null
+            if (!vecs || vecs.length < 4) return null
+            return computeShapeMetrics(vecs, r.timestamp as number)
+          })
+          .filter((s): s is NonNullable<typeof s> => s !== null)
+        if (shapes.length > 0) loadShapes(shapes)
       }
 
       if (portfolioRes.data) {
@@ -97,80 +143,10 @@ export function useRealtimeSubscriptions() {
       }
     }
 
-    seedStores().catch(() => {})
-
-    const channel = supabase
-      .channel('sbn-realtime')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'coherence_history' }, (payload) => {
-        const r = payload.new as Record<string, unknown>
-        pushCoherence(
-          r.r_bar as number, r.kappa as number,
-          r.recurrence_rate as number | undefined, r.structure_score as number | undefined,
-          r.t_dom as number | undefined,
-        )
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'price_series' }, (payload) => {
-        const r = payload.new as Record<string, unknown>
-        pushPriceTick({
-          timestamp: r.timestamp as number, price: r.price as number,
-          logReturn: r.log_return as number, denoisedReturn: r.denoised_return as number,
-        })
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'dsp_ticks' }, (payload) => {
-        pushDspTick(mapDspRow(payload.new as Record<string, unknown>))
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'polar_rose' }, (payload) => {
-        const r = payload.new as Record<string, unknown>
-        pushPolarRose({
-          timestamp: r.timestamp as number, phase: r.phase as number,
-          kappa: r.kappa as number, regimeId: r.regime_id as number,
-        })
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'voxel_snapshots' }, (payload) => {
-        const r = payload.new as Record<string, unknown>
-        pushVoxel({
-          timestamp: r.timestamp as number,
-          embeddingVecs: r.embedding_vecs as number[][] | undefined,
-          recurrenceSize: r.recurrence_size as number | undefined,
-          recurrenceRate: r.recurrence_rate as number | undefined,
-          corrDimEstimate: r.corr_dim_estimate as number | undefined,
-          structureScore: r.structure_score as number | undefined,
-        })
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'portfolio' }, (payload) => {
-        const p = payload.new as Record<string, unknown>
-        if (p.equity != null) {
-          updatePortfolio({
-            equity: p.equity as number,
-            position: null,
-            trades: [],
-            equityCurve: p.equity_curve as number[],
-            currentRegimeId: null,
-            reentryCooldowns: p.cooldowns as number[],
-            returns: p.returns as number[],
-            barCount: p.bar_count as number,
-            gpStates: [],
-          })
-        }
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trades' }, (payload) => {
-        const t = payload.new as Record<string, unknown>
-        const trade = {
-          regimeId: t.regime_id, direction: t.direction, pnl: t.pnl,
-          returnPct: t.return_pct, reward: t.reward, bars: t.bars,
-          reason: t.reason, exitPrice: t.exit_price, timestamp: t.timestamp,
-          paramVector: t.param_vector, entryKappa: t.entry_kappa, entryRBar: t.entry_r_bar,
-        }
-        usePortfolioStore.setState((s) => ({ trades: [...s.trades, trade] as typeof s.trades }))
-      })
-      .subscribe()
-
-    channelRef.current = channel
+    seedStores().catch((err) => console.error('[sbn] seedStores failed:', err))
 
     return () => {
       cancelled = true
-      channel.unsubscribe()
-      channelRef.current = null
     }
   }, [])
 }
