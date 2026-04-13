@@ -90,13 +90,13 @@ server.on('upgrade', (req, socket, head) => {
 
     upstream.on('open', () => {
       console.log('[ws] upstream open')
-      clientWs.on('message', (data) => {
-        if (upstream.readyState === WebSocket.OPEN) upstream.send(data)
+      clientWs.on('message', (data, isBinary) => {
+        if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary: isBinary })
       })
-      upstream.on('message', (data) => {
+      upstream.on('message', (data, isBinary) => {
         msgCount++
-        if (msgCount === 1) console.log('[ws] first upstream message received')
-        if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data)
+        if (msgCount === 1) console.log('[ws] first upstream message received, binary:', isBinary)
+        if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data, { binary: isBinary })
       })
     })
 
