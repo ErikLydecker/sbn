@@ -84,10 +84,13 @@ function MorphingShape({ target }: MorphingShapeProps) {
       target.principalExtents[1] / maxE,
       target.principalExtents[2] / maxE,
     ]
-    for (let i = 0; i < 3; i++) cur.extents[i] += (te[i]! - cur.extents[i]!) * dt
-    for (let i = 0; i < 3; i++) {
-      const t = (target.axisAsymmetry[i]! - 0.5) * 0.3
-      cur.asymOffset[i] += (t - cur.asymOffset[i]!) * dt
+    cur.extents[0] += (te[0] - cur.extents[0]) * dt
+    cur.extents[1] += (te[1] - cur.extents[1]) * dt
+    cur.extents[2] += (te[2] - cur.extents[2]) * dt
+    for (let d = 0; d < 3; d++) {
+      const idx = d as 0 | 1 | 2
+      const t = (target.axisAsymmetry[idx] - 0.5) * 0.3
+      cur.asymOffset[idx] += (t - cur.asymOffset[idx]) * dt
     }
     cur.hollowness += (target.hollowness - cur.hollowness) * dt
     cur.entropy += (target.densityEntropy - cur.entropy) * dt
@@ -179,7 +182,6 @@ function MorphingShape({ target }: MorphingShapeProps) {
 }
 
 const DENSITY_GRID = 12
-const DENSITY_RADIUS = 0.12
 const ATTRACTOR_LERP = 4.0
 const MAX_PTS = 600
 
@@ -238,7 +240,6 @@ function AttractorOverlay({ pts, shapeExtents }: { pts: number[][]; shapeExtents
   const currentRef = useRef<Float32Array>(new Float32Array(MAX_PTS * 3))
   const targetRef = useRef<Float32Array>(new Float32Array(0))
   const countRef = useRef(0)
-  const lineRef = useRef<any>(null)
   const headRef = useRef<THREE.Mesh>(null)
   const glowRef = useRef<THREE.Points>(null)
 
@@ -289,18 +290,18 @@ function AttractorOverlay({ pts, shapeExtents }: { pts: number[][]; shapeExtents
 
     const dt = Math.min(delta * ATTRACTOR_LERP, 1)
     for (let i = 0; i < n * 3; i++) {
-      cur[i] += ((tgt[i] ?? 0) - (cur[i] ?? 0)) * dt
+      cur[i] = (cur[i] ?? 0) + ((tgt[i] ?? 0) - (cur[i] ?? 0)) * dt
     }
 
     const pts3: [number, number, number][] = []
     for (let i = 0; i < n; i++) {
-      pts3.push([cur[i * 3]!, cur[i * 3 + 1]!, cur[i * 3 + 2]!])
+      pts3.push([cur[i * 3] ?? 0, cur[i * 3 + 1] ?? 0, cur[i * 3 + 2] ?? 0])
     }
     setLerpedPoints(pts3)
 
     if (headRef.current && n > 0) {
       const li = n - 1
-      headRef.current.position.set(cur[li * 3]!, cur[li * 3 + 1]!, cur[li * 3 + 2]!)
+      headRef.current.position.set(cur[li * 3] ?? 0, cur[li * 3 + 1] ?? 0, cur[li * 3 + 2] ?? 0)
     }
 
     if (glowRef.current) {
@@ -394,14 +395,14 @@ function AttractorSkeleton({ pts, shapeExtents }: { pts: number[][]; shapeExtent
 
     const dt = Math.min(delta * ATTRACTOR_LERP, 1)
     for (let i = 0; i < n * 3; i++) {
-      cur[i] += ((tgt[i] ?? 0) - (cur[i] ?? 0)) * dt
+      cur[i] = (cur[i] ?? 0) + ((tgt[i] ?? 0) - (cur[i] ?? 0)) * dt
     }
 
     for (let i = 0; i < n; i++) {
       const t = i / (n - 1)
       const radius = 0.006 + t * 0.008
 
-      _dummy.position.set(cur[i * 3]!, cur[i * 3 + 1]!, cur[i * 3 + 2]!)
+      _dummy.position.set(cur[i * 3] ?? 0, cur[i * 3 + 1] ?? 0, cur[i * 3 + 2] ?? 0)
       _dummy.scale.setScalar(radius)
       _dummy.updateMatrix()
       mesh.setMatrixAt(i, _dummy.matrix)
@@ -444,7 +445,7 @@ function Particles() {
     const time = state.clock.elapsedTime
     const arr = pointsRef.current.geometry.attributes.position!.array as Float32Array
     for (let i = 0; i < count; i++) {
-      arr[i * 3 + 1] += Math.sin(time + i) * 0.0005
+      arr[i * 3 + 1] = (arr[i * 3 + 1] ?? 0) + Math.sin(time + i) * 0.0005
     }
     pointsRef.current.geometry.attributes.position!.needsUpdate = true
     pointsRef.current.rotation.y = time * 0.02

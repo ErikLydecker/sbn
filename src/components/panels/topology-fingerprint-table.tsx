@@ -45,7 +45,7 @@ interface RankedRow {
 
 export const TopologyFingerprintTable = memo(function TopologyFingerprintTable({
   fingerprints,
-  currentMatches,
+  currentMatches: _currentMatches,
 }: TopologyFingerprintTableProps) {
   const ranked = useMemo(() => {
     if (fingerprints.length < 2) return []

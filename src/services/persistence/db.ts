@@ -302,7 +302,7 @@ export async function saveSmoothState(state: Omit<PersistedSmoothState, 'id'>): 
     phase_basis_e1: state.phaseBasisE1 ?? [],
     phase_basis_e2: state.phaseBasisE2 ?? [],
     goertzel_snapshot: state.goertzelSnapshot ?? null,
-    topology_state: state.topologyState ?? null,
+    topology_state: (state.topologyState ?? null) as Json,
   }, { onConflict: 'id' })
   if (error) throw error
 }
@@ -543,7 +543,9 @@ const MAX_DSP_TICKS = 10_000
 const MAX_POLAR_ROSE = 10_000
 const MAX_VOXEL_SNAPSHOTS = 5_000
 
-async function pruneTable(table: string, max: number): Promise<void> {
+type PrunableTable = 'dsp_ticks' | 'polar_rose' | 'voxel_snapshots' | 'topology_snapshots'
+
+async function pruneTable(table: PrunableTable, max: number): Promise<void> {
   const { count, error: countError } = await supabase
     .from(table)
     .select('*', { count: 'exact', head: true })
@@ -551,11 +553,12 @@ async function pruneTable(table: string, max: number): Promise<void> {
   const excess = count - max
   const { data: oldest, error: oldestError } = await supabase
     .from(table)
-    .select('id')
+    .select('id, timestamp')
     .order('timestamp', { ascending: true })
     .limit(excess)
   if (oldestError || !oldest || oldest.length === 0) return
-  await supabase.from(table).delete().in('id', oldest.map((r) => r.id))
+  const ids = oldest.map((r) => r.id)
+  await supabase.from(table).delete().in('id', ids)
 }
 
 export async function pruneTables(): Promise<void> {
