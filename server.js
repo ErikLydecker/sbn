@@ -20,15 +20,31 @@ const MIME = {
 }
 
 const BINANCE_WS = 'wss://stream.binance.com:9443/ws'
-const BINANCE_REST = 'https://api.binance.com'
+const BINANCE_REST_ENDPOINTS = [
+  'https://data-api.binance.vision',
+  'https://api1.binance.com',
+  'https://api.binance.com',
+]
+
+async function fetchWithFallback(path, search) {
+  for (const base of BINANCE_REST_ENDPOINTS) {
+    try {
+      const r = await fetch(base + path + search, { headers: { 'User-Agent': 'sbn-proxy' } })
+      if (r.status === 418 || r.status === 451) continue
+      return r
+    } catch { continue }
+  }
+  return null
+}
 
 const server = createServer((req, res) => {
   const url = new URL(req.url || '/', `http://localhost:${PORT}`)
 
   if (url.pathname.startsWith('/api-binance/')) {
-    const upstream = BINANCE_REST + url.pathname.replace('/api-binance', '') + url.search
-    fetch(upstream, { headers: { 'User-Agent': 'sbn-proxy' } })
+    const path = url.pathname.replace('/api-binance', '')
+    fetchWithFallback(path, url.search)
       .then(async (r) => {
+        if (!r) { res.writeHead(502); res.end('All upstreams failed'); return }
         res.writeHead(r.status, {
           'Content-Type': r.headers.get('content-type') || 'application/json',
           'Access-Control-Allow-Origin': '*',
