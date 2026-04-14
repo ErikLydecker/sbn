@@ -47,6 +47,36 @@ export const TRADING_CONFIG = {
   curvatureConcentrationFloor: 0.3,
   shapeConfidenceSigmoidCenter: 0.5,
   shapeConfidenceSigmoidSteepness: 6,
+
+  crs: {
+    threshold: 0.25,
+    groupWeights: {
+      coherence: 0.25,
+      regime: 0.20,
+      topology: 0.20,
+      geometry: 0.15,
+      trend: 0.20,
+    },
+    sigmoids: {
+      kappa:               { center: 1.5,  steepness: 2.0 },
+      ppc:                 { center: 0.05, steepness: 30.0 },
+      kappaPersistence:    { center: 3,    steepness: 1.0 },
+      alpha:               { center: 0.4,  steepness: 8.0 },
+      hmmEntropy:          { center: 0.7,  steepness: -6.0 },
+      topologyScore:       { center: 0.3,  steepness: 8.0 },
+      recurrenceRate:      { center: 0.05, steepness: 30.0 },
+      structureScore:      { center: 0.4,  steepness: 6.0 },
+      curvatureConc:       { center: 0.3,  steepness: 6.0 },
+      h1Peak:              { center: 0.1,  steepness: 10.0 },
+      torsionEnergy:       { center: 0.01, steepness: 50.0 },
+      subspaceStability:   { center: 0.5,  steepness: 6.0 },
+      clockVel:            { center: 0.005, steepness: 300.0 },
+    },
+    hurstTrendFloor: 0.55,
+    hurstCyclicCeiling: 0.45,
+    hurstBoost: 1.5,
+    hurstPenalty: 0.4,
+  },
 } as const
 
 export type ParamName = (typeof TRADING_CONFIG.paramNames)[number]

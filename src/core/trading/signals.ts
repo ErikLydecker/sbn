@@ -2,76 +2,142 @@ import type { OpenPosition } from '@/schemas/trade'
 import type { RegimeId } from '@/schemas/regime'
 import type { HmmAlpha } from '@/core/dsp/hmm'
 import type { TopologyClass } from '@/core/dsp/topology'
+import type { ClockSnapshot } from './engine'
 import { regimeDirection } from './regimes'
 import { decodeParams } from './ucb'
 import { TRADING_CONFIG } from '@/config/trading'
 
 const TURNING_PHASES = new Set([1, 3])
-const TURNING_ENTRY_THR_MIN = 0.005
+const TRENDING_PHASES = new Set([0, 2])
 
-/**
- * Sigmoid confidence weight from kappa.
- * Returns 0..1 — used to scale position size at turning points.
- */
-export function kappaConfidence(kappa: number): number {
-  const { kappaSigmoidCenter: c, kappaSigmoidSteepness: s } = TRADING_CONFIG
-  return 1 / (1 + Math.exp(-s * (kappa - c)))
+function sigmoid(value: number, center: number, steepness: number): number {
+  return 1 / (1 + Math.exp(-steepness * (value - center)))
 }
 
-export function topologyConfidence(topologyScore: number): number {
-  const { topologySigmoidCenter: c, topologySigmoidSteepness: s } = TRADING_CONFIG
-  return 1 / (1 + Math.exp(-s * (topologyScore - c)))
+function hmmEntropy(alpha: HmmAlpha): number {
+  let h = 0
+  for (const a of alpha) {
+    if (a > 1e-12) h -= a * Math.log2(a)
+  }
+  return h / 2 // normalize to 0-1 (max entropy for 4 states = 2 bits)
+}
+
+export interface CrsBreakdown {
+  coherence: number
+  regime: number
+  topology: number
+  geometry: number
+  trend: number
+  composite: number
+}
+
+export function computeCrs(
+  snapshot: ClockSnapshot,
+  clockVel: number,
+  kappaPersistence: number,
+  phase: number,
+): CrsBreakdown {
+  const cfg = TRADING_CONFIG.crs
+  const s = cfg.sigmoids
+
+  // --- Phase Coherence group ---
+  const kappaR = sigmoid(snapshot.kappa, s.kappa.center, s.kappa.steepness)
+  const ppcR = sigmoid(snapshot.ppc, s.ppc.center, s.ppc.steepness)
+  const kappaPersR = sigmoid(kappaPersistence, s.kappaPersistence.center, s.kappaPersistence.steepness)
+  const coherenceGroup = (kappaR + ppcR + kappaPersR) / 3
+
+  // --- Regime Confidence group ---
+  const alphaR = sigmoid(snapshot.alpha[phase]!, s.alpha.center, s.alpha.steepness)
+  const entropyVal = hmmEntropy(snapshot.alpha)
+  const entropyR = sigmoid(entropyVal, s.hmmEntropy.center, s.hmmEntropy.steepness)
+  const regimeGroup = (alphaR + entropyR) / 2
+
+  // --- Topology group ---
+  const topoR = sigmoid(snapshot.topologyScore, s.topologyScore.center, s.topologyScore.steepness)
+  const recurrR = sigmoid(snapshot.recurrenceRate, s.recurrenceRate.center, s.recurrenceRate.steepness)
+  const structR = sigmoid(snapshot.structureScore, s.structureScore.center, s.structureScore.steepness)
+  const topoGroup = (topoR + recurrR + structR) / 3
+
+  // --- Geometry group ---
+  const curvR = sigmoid(snapshot.curvatureConcentration, s.curvatureConc.center, s.curvatureConc.steepness)
+  const h1R = sigmoid(snapshot.h1Peak, s.h1Peak.center, s.h1Peak.steepness)
+  const torsionR = sigmoid(snapshot.torsionEnergy, s.torsionEnergy.center, s.torsionEnergy.steepness)
+  const stabR = sigmoid(snapshot.subspaceStability, s.subspaceStability.center, s.subspaceStability.steepness)
+  const geomGroup = (curvR + h1R + torsionR + stabR) / 4
+
+  // --- Trend group (Hurst-adaptive) ---
+  const hurst = snapshot.hurst
+  const isTurning = TURNING_PHASES.has(phase)
+  const isTrending = TRENDING_PHASES.has(phase)
+  let hurstR: number
+  if (isTrending) {
+    // High Hurst boosts trend trades
+    hurstR = hurst > cfg.hurstTrendFloor
+      ? Math.min(1, sigmoid(hurst, cfg.hurstTrendFloor, 8) * cfg.hurstBoost)
+      : sigmoid(hurst, 0.5, 4)
+  } else if (isTurning) {
+    // Low Hurst boosts turning-phase (mean-reversion) trades
+    hurstR = hurst < cfg.hurstCyclicCeiling
+      ? Math.min(1, sigmoid(1 - hurst, 1 - cfg.hurstCyclicCeiling, 8) * cfg.hurstBoost)
+      : cfg.hurstPenalty
+  } else {
+    hurstR = 0.5
+  }
+  const velR = sigmoid(Math.abs(clockVel), s.clockVel.center, s.clockVel.steepness)
+  const trendGroup = (hurstR + velR) / 2
+
+  // --- Composite: weighted geometric mean ---
+  const w = cfg.groupWeights
+  const eps = 1e-6
+  const composite = Math.pow(Math.max(coherenceGroup, eps), w.coherence)
+    * Math.pow(Math.max(regimeGroup, eps), w.regime)
+    * Math.pow(Math.max(topoGroup, eps), w.topology)
+    * Math.pow(Math.max(geomGroup, eps), w.geometry)
+    * Math.pow(Math.max(trendGroup, eps), w.trend)
+
+  return {
+    coherence: coherenceGroup,
+    regime: regimeGroup,
+    topology: topoGroup,
+    geometry: geomGroup,
+    trend: trendGroup,
+    composite,
+  }
 }
 
 export function shouldEnter(
   regimeId: RegimeId,
   clockVel: number,
   clockAccel: number,
-  kappa: number,
+  snapshot: ClockSnapshot,
   params: number[],
   cooldowns: number[],
-  alpha: HmmAlpha,
   kappaPersistence: number,
-  topologyScore?: number,
-  hurst?: number,
-  curvatureConcentration?: number,
-): boolean {
-  if (cooldowns[regimeId]! > 0) return false
+): { enter: boolean; crs: number } {
+  if (cooldowns[regimeId]! > 0) return { enter: false, crs: 0 }
+
   const phase = Math.floor(regimeId / 2)
-  const minConf = params[5]!
-  if (alpha[phase]! < minConf) return false
-
-  if (topologyScore !== undefined && topologyScore < TRADING_CONFIG.topologyFloor) return false
-
-  const isTurning = TURNING_PHASES.has(phase)
-
-  if (isTurning) {
-    if (kappa < TRADING_CONFIG.kappaFloor) return false
-    if (kappaPersistence < TRADING_CONFIG.kappaPersistenceBars) return false
-    if (hurst !== undefined && hurst > TRADING_CONFIG.hurstTrendThreshold) return false
-    if (curvatureConcentration !== undefined && curvatureConcentration < TRADING_CONFIG.curvatureConcentrationFloor) return false
-  }
-
   const dir = regimeDirection(regimeId)
-  const entryThreshold = isTurning
-    ? Math.max(params[0]!, TURNING_ENTRY_THR_MIN)
-    : params[0]!
-  if (Math.abs(clockVel) < entryThreshold) return false
 
-  if (dir === 1) {
-    if (clockVel <= 0) return false
-    if (isTurning && clockAccel <= 0) return false
-  } else {
-    if (clockVel >= 0) return false
-    if (isTurning && clockAccel >= 0) return false
+  // Direction match is still binary -- not a confidence question
+  if (dir === 1 && clockVel <= 0) return { enter: false, crs: 0 }
+  if (dir === -1 && clockVel >= 0) return { enter: false, crs: 0 }
+
+  // At turning phases, require acceleration to confirm the reversal
+  const isTurning = TURNING_PHASES.has(phase)
+  if (isTurning) {
+    if (dir === 1 && clockAccel <= 0) return { enter: false, crs: 0 }
+    if (dir === -1 && clockAccel >= 0) return { enter: false, crs: 0 }
   }
 
-  return true
-}
+  const breakdown = computeCrs(snapshot, clockVel, kappaPersistence, phase)
+  const threshold = params[5]! * TRADING_CONFIG.crs.threshold / 0.5
+  const effectiveThreshold = Math.max(TRADING_CONFIG.crs.threshold * 0.5, Math.min(threshold, 0.8))
 
-export function shapeConfidence(curvatureConcentration: number): number {
-  const { shapeConfidenceSigmoidCenter: c, shapeConfidenceSigmoidSteepness: s } = TRADING_CONFIG
-  return 1 / (1 + Math.exp(-s * (curvatureConcentration - c)))
+  return {
+    enter: breakdown.composite >= effectiveThreshold,
+    crs: breakdown.composite,
+  }
 }
 
 export type ExitReason = 'stop' | 'regime_flip' | 'phase_target'
@@ -113,8 +179,8 @@ export function shouldExit(
     (prevTopologyClass === 'stable_loop' || prevTopologyClass === 'unstable_loop') &&
     (topologyClass === 'drift' || topologyClass === 'chaotic')
   ) {
-    const minHold = Math.max(TRADING_CONFIG.minHoldFloor, Math.round(tDom * TRADING_CONFIG.minHoldFraction))
-    if (barsHeld >= minHold) return 'regime_flip'
+    const topoMinHold = Math.max(TRADING_CONFIG.minHoldFloor, Math.round(tDom * TRADING_CONFIG.minHoldFraction))
+    if (barsHeld >= topoMinHold) return 'regime_flip'
   }
 
   const exitPh = params[3]!

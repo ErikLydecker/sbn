@@ -315,7 +315,7 @@ function runAnalysis(price: number) {
       })
     }
 
-    if (!sr.isBootstrapping && smoothState.vmKappa >= 0.1 && bars.length >= DSP_CONFIG.minBootstrapBars) {
+    if (!sr.isBootstrapping && bars.length >= DSP_CONFIG.minBootstrapBars) {
       const snapshot: ClockSnapshot = {
         alpha: smoothState.alpha,
         kappa: smoothState.vmKappa,
@@ -329,6 +329,13 @@ function runAnalysis(price: number) {
         topologyClass: sr.topologyClass ?? 'drift',
         morphologySpecies: sr.morphologySpecies ?? -1,
         curvatureConcentration: sr.curvatureConcentration ?? 0,
+        recurrenceRate: sr.fixedRecurrenceRate ?? sr.recurrenceRate ?? 0,
+        structureScore: sr.structureScore ?? 0,
+        h1Peak: sr.h1Peak ?? 0,
+        h1Persistence: sr.h1Persistence ?? 0,
+        fragmentationRate: sr.fragmentationRate ?? 0,
+        torsionEnergy: sr.torsionEnergy ?? 0,
+        subspaceStability: sr.subspaceStability ?? 0,
       }
       portfolioState = portfolioTick(portfolioState, snapshot)
 
