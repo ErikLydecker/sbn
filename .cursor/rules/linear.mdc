@@ -15,13 +15,13 @@ Every agent session MUST track its work in Linear using the `plugin-linear-linea
 - **Labels (type):** Bug, Feature, Improvement, refactor, docs, test, chore
 - **Label (source):** cursor-agent (always apply this label)
 
-## Delegation
+## Assignment
 
-All issues MUST be delegated to the Cursor agent — never assign to a human user. This keeps the workflow fully automated.
+When working from the IDE, assign issues to yourself — do NOT delegate to a cloud agent.
 
-- Use `delegate: "Cursor"` on every `save_issue` call (both create and update).
-- Do NOT use `assignee: "me"` — the human owner is implicit via delegation.
-- The Cursor agent must be installed in the Linear workspace via the [Cursor integrations dashboard](https://www.cursor.com/dashboard/integrations).
+- Use `assignee: "me"` on every `save_issue` call (both create and update).
+- Do NOT use `delegate: "Cursor"` — that launches a Background Agent in the cloud, which duplicates work the IDE agent is already doing.
+- Delegation is only appropriate when you intentionally want a cloud Background Agent to handle a task autonomously (e.g., from a separate automation trigger). IDE sessions must never delegate.
 
 ## Workflow
 
@@ -38,14 +38,14 @@ If a matching issue exists, reuse it. Otherwise create one:
 ```
 save_issue with title=<concise task summary>, description=<user request and goal>,
   team="SBN", project="SBN Platform", state="In Progress",
-  delegate="Cursor", labels=["cursor-agent", <type label>]
+  assignee="me", labels=["cursor-agent", <type label>]
 ```
 
 Pick the best type label: `Feature` for new functionality, `Bug` for fixes, `Improvement` for enhancements, `refactor` for restructuring, `docs` for documentation, `test` for tests, `chore` for config/tooling.
 
 ### 2. During Work — Sub-tasks if Scope Grows
 
-If the task expands into distinct sub-tasks, create child issues with `parentId` set to the main issue ID and `delegate: "Cursor"`. Keep each child focused on one concern.
+If the task expands into distinct sub-tasks, create child issues with `parentId` set to the main issue ID and `assignee: "me"`. Keep each child focused on one concern.
 
 ### 3. Session End — Ship and Close
 
@@ -78,7 +78,7 @@ When all code changes are complete:
 
 - Never create duplicate issues — always search first.
 - One issue per agent session unless sub-tasks are needed.
-- Always delegate to `"Cursor"` — never assign to a human user.
+- Always use `assignee: "me"` — never use `delegate: "Cursor"` from the IDE.
 - Keep titles short and descriptive (imperative mood: "Add X", "Fix Y", "Refactor Z").
 - Descriptions should capture the user's original request.
 - Always include the `cursor-agent` label so automated work is filterable.
