@@ -4,6 +4,9 @@ import { analyseRaw, analyseSmooth, createInitialSmoothState, computeTransitionM
 import type { SmoothClockState } from '@/core/dsp/pipeline'
 import { portfolioTick, createPortfolioState, restorePortfolioState } from '@/core/trading/engine'
 import type { PortfolioState, ClockSnapshot } from '@/core/trading/engine'
+import { computeCrs } from '@/core/trading/signals'
+import { regimeDirection } from '@/core/trading/regimes'
+import { TRADING_CONFIG } from '@/config/trading'
 import type { WorkerInbound, WorkerOutbound } from './dsp.messages'
 import { DSP_CONFIG } from '@/config/dsp'
 import { GoertzelBank } from '@/core/dsp/goertzel'
@@ -337,7 +340,55 @@ function runAnalysis(price: number) {
         torsionEnergy: sr.torsionEnergy ?? 0,
         subspaceStability: sr.subspaceStability ?? 0,
       }
+      const prevPosition = portfolioState.position
       portfolioState = portfolioTick(portfolioState, snapshot)
+
+      const regimeId = portfolioState.currentRegimeId ?? 0
+      const phase = Math.floor(regimeId / 2)
+      const dir = regimeDirection(regimeId)
+      const crsBreakdown = computeCrs(snapshot, portfolioState.clockVel, portfolioState.kappaPersistence, phase)
+      const threshold = TRADING_CONFIG.crs.threshold
+      const dirMatch = dir === 1 ? portfolioState.clockVel > 0 : portfolioState.clockVel < 0
+      const isTurning = phase === 1 || phase === 3
+      const accelMatch = !isTurning || (dir === 1 ? portfolioState.clockAccel > 0 : portfolioState.clockAccel < 0)
+      const entered = !prevPosition && portfolioState.position !== null
+
+      post({
+        type: 'crsSnapshot',
+        data: {
+          timestamp: Date.now(),
+          regimeId,
+          phase,
+          direction: dir,
+          clockVel: portfolioState.clockVel,
+          clockAccel: portfolioState.clockAccel,
+          kappaPersistence: portfolioState.kappaPersistence,
+          kappa: snapshot.kappa,
+          ppc: snapshot.ppc,
+          hurst: snapshot.hurst,
+          topologyScore: snapshot.topologyScore,
+          topologyClass: snapshot.topologyClass,
+          recurrenceRate: snapshot.recurrenceRate,
+          structureScore: snapshot.structureScore,
+          curvatureConcentration: snapshot.curvatureConcentration,
+          h1Peak: snapshot.h1Peak,
+          torsionEnergy: snapshot.torsionEnergy,
+          subspaceStability: snapshot.subspaceStability,
+          alphaPhase: snapshot.alpha[phase]!,
+          coherenceGroup: crsBreakdown.coherence,
+          regimeGroup: crsBreakdown.regime,
+          topologyGroup: crsBreakdown.topology,
+          geometryGroup: crsBreakdown.geometry,
+          trendGroup: crsBreakdown.trend,
+          composite: crsBreakdown.composite,
+          threshold,
+          entered,
+          cooldownActive: portfolioState.cooldowns[regimeId]! > 0,
+          directionMatch: dirMatch,
+          accelMatch,
+          price: snapshot.price,
+        },
+      })
 
       post({
         type: 'portfolio',

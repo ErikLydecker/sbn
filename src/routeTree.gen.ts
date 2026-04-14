@@ -13,6 +13,7 @@ import { Route as VoxelRouteImport } from './app/routes/voxel'
 import { Route as TopologyRouteImport } from './app/routes/topology'
 import { Route as ShapeRouteImport } from './app/routes/shape'
 import { Route as SettingsRouteImport } from './app/routes/settings'
+import { Route as ReadinessRouteImport } from './app/routes/readiness'
 import { Route as OptimizationRouteImport } from './app/routes/optimization'
 import { Route as MorphologyRouteImport } from './app/routes/morphology'
 import { Route as HistoryRouteImport } from './app/routes/history'
@@ -39,6 +40,11 @@ const ShapeRoute = ShapeRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReadinessRoute = ReadinessRouteImport.update({
+  id: '/readiness',
+  path: '/readiness',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OptimizationRoute = OptimizationRouteImport.update({
@@ -85,6 +91,7 @@ export interface FileRoutesByFullPath {
   '/history': typeof HistoryRoute
   '/morphology': typeof MorphologyRoute
   '/optimization': typeof OptimizationRoute
+  '/readiness': typeof ReadinessRoute
   '/settings': typeof SettingsRoute
   '/shape': typeof ShapeRoute
   '/topology': typeof TopologyRoute
@@ -98,6 +105,7 @@ export interface FileRoutesByTo {
   '/history': typeof HistoryRoute
   '/morphology': typeof MorphologyRoute
   '/optimization': typeof OptimizationRoute
+  '/readiness': typeof ReadinessRoute
   '/settings': typeof SettingsRoute
   '/shape': typeof ShapeRoute
   '/topology': typeof TopologyRoute
@@ -112,6 +120,7 @@ export interface FileRoutesById {
   '/history': typeof HistoryRoute
   '/morphology': typeof MorphologyRoute
   '/optimization': typeof OptimizationRoute
+  '/readiness': typeof ReadinessRoute
   '/settings': typeof SettingsRoute
   '/shape': typeof ShapeRoute
   '/topology': typeof TopologyRoute
@@ -127,6 +136,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/morphology'
     | '/optimization'
+    | '/readiness'
     | '/settings'
     | '/shape'
     | '/topology'
@@ -140,6 +150,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/morphology'
     | '/optimization'
+    | '/readiness'
     | '/settings'
     | '/shape'
     | '/topology'
@@ -153,6 +164,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/morphology'
     | '/optimization'
+    | '/readiness'
     | '/settings'
     | '/shape'
     | '/topology'
@@ -167,6 +179,7 @@ export interface RootRouteChildren {
   HistoryRoute: typeof HistoryRoute
   MorphologyRoute: typeof MorphologyRoute
   OptimizationRoute: typeof OptimizationRoute
+  ReadinessRoute: typeof ReadinessRoute
   SettingsRoute: typeof SettingsRoute
   ShapeRoute: typeof ShapeRoute
   TopologyRoute: typeof TopologyRoute
@@ -201,6 +214,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/readiness': {
+      id: '/readiness'
+      path: '/readiness'
+      fullPath: '/readiness'
+      preLoaderRoute: typeof ReadinessRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/optimization': {
@@ -263,6 +283,7 @@ const rootRouteChildren: RootRouteChildren = {
   HistoryRoute: HistoryRoute,
   MorphologyRoute: MorphologyRoute,
   OptimizationRoute: OptimizationRoute,
+  ReadinessRoute: ReadinessRoute,
   SettingsRoute: SettingsRoute,
   ShapeRoute: ShapeRoute,
   TopologyRoute: TopologyRoute,
