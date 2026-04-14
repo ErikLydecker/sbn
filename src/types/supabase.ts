@@ -200,6 +200,39 @@ export type Database = {
         }
         Relationships: []
       }
+      morphology_history: {
+        Row: {
+          curvature_concentration: number
+          id: number
+          max_curvature: number
+          mean_curvature: number
+          regime_id: number | null
+          species: number
+          timestamp: number
+          torsion_energy: number
+        }
+        Insert: {
+          curvature_concentration?: number
+          id?: never
+          max_curvature?: number
+          mean_curvature?: number
+          regime_id?: number | null
+          species?: number
+          timestamp: number
+          torsion_energy?: number
+        }
+        Update: {
+          curvature_concentration?: number
+          id?: never
+          max_curvature?: number
+          mean_curvature?: number
+          regime_id?: number | null
+          species?: number
+          timestamp?: number
+          torsion_energy?: number
+        }
+        Relationships: []
+      }
       polar_rose: {
         Row: {
           id: number
@@ -374,6 +407,39 @@ export type Database = {
           vel?: number
           vm_kappa?: number
           vm_mu?: number
+        }
+        Relationships: []
+      }
+      species_catalog: {
+        Row: {
+          avg_curvature_concentration: number
+          avg_h1_peak: number
+          count: number
+          id: number
+          last_seen: number
+          regime_returns: Json
+          total_return: number
+          wins: number
+        }
+        Insert: {
+          avg_curvature_concentration?: number
+          avg_h1_peak?: number
+          count?: number
+          id: number
+          last_seen?: number
+          regime_returns?: Json
+          total_return?: number
+          wins?: number
+        }
+        Update: {
+          avg_curvature_concentration?: number
+          avg_h1_peak?: number
+          count?: number
+          id?: number
+          last_seen?: number
+          regime_returns?: Json
+          total_return?: number
+          wins?: number
         }
         Relationships: []
       }
