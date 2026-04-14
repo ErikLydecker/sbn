@@ -7,7 +7,9 @@ import { usePolarRoseStore } from '@/stores/polar-rose.store'
 import { useVoxelStore } from '@/stores/voxel.store'
 import { usePortfolioStore } from '@/stores/portfolio.store'
 import { useTopologyStore } from '@/stores/topology.store'
+import { useMorphologyStore } from '@/stores/morphology.store'
 import { computeShapeMetrics } from '@/core/dsp/shape-metrics'
+import { loadMorphologyHistory, loadSpeciesCatalog } from '@/services/persistence/db'
 
 /**
  * Seed stores from persisted DB data on mount.
@@ -29,6 +31,8 @@ export function useRealtimeSubscriptions() {
   const loadTopology = useTopologyStore((s) => s.load)
   const topologyLoaded = useTopologyStore((s) => s.loaded)
   const loadShapes = useTopologyStore((s) => s.loadShapes)
+  const loadMorphHistory = useMorphologyStore((s) => s.loadHistory)
+  const loadMorphCatalog = useMorphologyStore((s) => s.loadCatalog)
 
   useEffect(() => {
     let cancelled = false
@@ -140,6 +144,35 @@ export function useRealtimeSubscriptions() {
           barCount: p.bar_count,
           gpStates: [],
         })
+      }
+
+      try {
+        const [morphRows, catalogRows] = await Promise.all([
+          loadMorphologyHistory(500),
+          loadSpeciesCatalog(),
+        ])
+        if (cancelled) return
+        if (morphRows.length > 0) {
+          loadMorphHistory(
+            morphRows.map((r) => ({ t: r.timestamp, mean: r.mean_curvature, max: r.max_curvature, concentration: r.curvature_concentration })),
+            morphRows.map((r) => ({ t: r.timestamp, energy: r.torsion_energy })),
+            morphRows.map((r) => ({ t: r.timestamp, species: r.species, regimeId: r.regime_id })),
+          )
+        }
+        if (catalogRows.length > 0) {
+          loadMorphCatalog(catalogRows.map((r) => ({
+            id: r.id,
+            count: r.count,
+            totalReturn: r.total_return,
+            wins: r.wins,
+            avgCurvatureConcentration: r.avg_curvature_concentration,
+            avgH1Peak: r.avg_h1_peak,
+            lastSeen: r.last_seen,
+            regimeReturns: r.regime_returns,
+          })))
+        }
+      } catch (err) {
+        console.error('[sbn] morphology seed failed:', err)
       }
     }
 

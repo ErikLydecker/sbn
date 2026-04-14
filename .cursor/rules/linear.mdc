@@ -1,0 +1,59 @@
+---
+description: Automated Linear project management — every agent session must track its work as Linear issues.
+alwaysApply: true
+---
+
+# Linear Automation
+
+Every agent session MUST track its work in Linear using the `plugin-linear-linear` MCP server. No manual ticket management required.
+
+## Workspace
+
+- **Team:** SBN
+- **Project:** SBN Platform
+- **Statuses:** Backlog, Todo, In Progress, Done, Canceled
+- **Labels (type):** Bug, Feature, Improvement, refactor, docs, test, chore
+- **Label (source):** cursor-agent (always apply this label)
+
+## Workflow
+
+### 1. Session Start — Create or Find an Issue
+
+Before making any code changes, search Linear for an existing issue that matches the current task:
+
+```
+list_issues with query=<short description>, project="SBN Platform", state="In Progress" or state="Todo"
+```
+
+If a matching issue exists, reuse it. Otherwise create one:
+
+```
+save_issue with title=<concise task summary>, description=<user request and goal>,
+  team="SBN", project="SBN Platform", state="In Progress",
+  assignee="me", labels=["cursor-agent", <type label>]
+```
+
+Pick the best type label: `Feature` for new functionality, `Bug` for fixes, `Improvement` for enhancements, `refactor` for restructuring, `docs` for documentation, `test` for tests, `chore` for config/tooling.
+
+### 2. During Work — Sub-tasks if Scope Grows
+
+If the task expands into distinct sub-tasks, create child issues with `parentId` set to the main issue ID. Keep each child focused on one concern.
+
+### 3. Session End — Summarize and Close
+
+When all work is complete, before responding to the user:
+
+1. **Add a summary comment** via `save_comment` on the issue:
+   - Files modified and why
+   - Key decisions or trade-offs
+   - Any follow-up work needed
+2. **Move to Done** via `save_issue` with `state="Done"`
+
+### Rules
+
+- Never create duplicate issues — always search first.
+- One issue per agent session unless sub-tasks are needed.
+- Keep titles short and descriptive (imperative mood: "Add X", "Fix Y", "Refactor Z").
+- Descriptions should capture the user's original request.
+- Always include the `cursor-agent` label so automated work is filterable.
+- If the session only answers a question with no code changes, skip issue creation.

@@ -567,6 +567,7 @@ export async function pruneTables(): Promise<void> {
     pruneTable('polar_rose', MAX_POLAR_ROSE),
     pruneTable('voxel_snapshots', MAX_VOXEL_SNAPSHOTS),
     pruneTable('topology_snapshots', MAX_TOPOLOGY_SNAPSHOTS),
+    pruneTable('morphology_history', MAX_MORPHOLOGY_HISTORY),
   ])
 }
 
@@ -647,4 +648,101 @@ export async function appendVoxelSnapshots(snapshots: VoxelSnapshot[]): Promise<
   }))
   const { error } = await supabase.from('voxel_snapshots').insert(rows)
   if (error) throw error
+}
+
+// ---------------------------------------------------------------------------
+// Morphology History
+// ---------------------------------------------------------------------------
+
+export interface MorphologyHistoryRow {
+  timestamp: number
+  mean_curvature: number
+  max_curvature: number
+  curvature_concentration: number
+  torsion_energy: number
+  species: number
+  regime_id?: number
+}
+
+const MAX_MORPHOLOGY_HISTORY = 5_000
+
+export async function appendMorphologyHistory(rows: MorphologyHistoryRow[]): Promise<void> {
+  const mapped = rows.map((r) => ({
+    timestamp: r.timestamp,
+    mean_curvature: fin(r.mean_curvature),
+    max_curvature: fin(r.max_curvature),
+    curvature_concentration: fin(r.curvature_concentration),
+    torsion_energy: fin(r.torsion_energy),
+    species: r.species,
+    regime_id: r.regime_id ?? null,
+  }))
+  const { error } = await supabase.from('morphology_history').insert(mapped)
+  if (error) throw error
+}
+
+export async function loadMorphologyHistory(limit = 500): Promise<MorphologyHistoryRow[]> {
+  const { data, error } = await supabase
+    .from('morphology_history')
+    .select('*')
+    .order('timestamp', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data ?? []).map((r) => ({
+    timestamp: r.timestamp,
+    mean_curvature: r.mean_curvature,
+    max_curvature: r.max_curvature,
+    curvature_concentration: r.curvature_concentration,
+    torsion_energy: r.torsion_energy,
+    species: r.species,
+    regime_id: r.regime_id ?? undefined,
+  })).reverse()
+}
+
+// ---------------------------------------------------------------------------
+// Species Catalog
+// ---------------------------------------------------------------------------
+
+export interface SpeciesCatalogRow {
+  id: number
+  count: number
+  total_return: number
+  wins: number
+  avg_curvature_concentration: number
+  avg_h1_peak: number
+  last_seen: number
+  regime_returns: Record<number, { sum: number; count: number }>
+}
+
+export async function upsertSpeciesCatalog(entries: SpeciesCatalogRow[]): Promise<void> {
+  if (entries.length === 0) return
+  const rows = entries.map((e) => ({
+    id: e.id,
+    count: e.count,
+    total_return: fin(e.total_return),
+    wins: e.wins,
+    avg_curvature_concentration: fin(e.avg_curvature_concentration),
+    avg_h1_peak: fin(e.avg_h1_peak),
+    last_seen: e.last_seen,
+    regime_returns: e.regime_returns,
+  }))
+  const { error } = await supabase.from('species_catalog').upsert(rows, { onConflict: 'id' })
+  if (error) throw error
+}
+
+export async function loadSpeciesCatalog(): Promise<SpeciesCatalogRow[]> {
+  const { data, error } = await supabase
+    .from('species_catalog')
+    .select('*')
+    .order('id', { ascending: true })
+  if (error) throw error
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    count: r.count,
+    total_return: r.total_return,
+    wins: r.wins,
+    avg_curvature_concentration: r.avg_curvature_concentration,
+    avg_h1_peak: r.avg_h1_peak,
+    last_seen: r.last_seen,
+    regime_returns: (r.regime_returns as Record<number, { sum: number; count: number }>) ?? {},
+  }))
 }

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "stop": [
+      {
+        "type": "prompt",
+        "prompt": "Before finishing: check if you created or updated any Linear issues during this session. If you did, make sure every issue you worked on has its status set to Done and has a summary comment explaining what was changed, why, and which files were affected. If you haven't touched Linear at all during this session, skip this step.",
+        "loop_limit": 1
+      }
+    ]
+  }
+}

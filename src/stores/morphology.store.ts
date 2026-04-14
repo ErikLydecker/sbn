@@ -47,6 +47,8 @@ export interface MorphologyStoreState {
 
   push: (data: TopologyWorkerData) => void
   recordTradeResult: (species: number, regimeId: number, returnPct: number) => void
+  loadHistory: (history: CurvatureHistoryPoint[], torsion: TorsionHistoryPoint[], species: SpeciesHistoryPoint[]) => void
+  loadCatalog: (catalog: SpeciesCatalogEntry[]) => void
   reset: () => void
 }
 
@@ -148,6 +150,18 @@ export const useMorphologyStore = create<MorphologyStoreState>((set) => ({
       })
       return { speciesCatalog: catalog }
     })
+  },
+
+  loadHistory: (history, torsion, species) => {
+    set({
+      curvatureHistory: history.slice(-MAX_HISTORY),
+      torsionHistory: torsion.slice(-MAX_HISTORY),
+      speciesHistory: species.slice(-MAX_HISTORY),
+    })
+  },
+
+  loadCatalog: (catalog) => {
+    set({ speciesCatalog: catalog })
   },
 
   reset: () => {

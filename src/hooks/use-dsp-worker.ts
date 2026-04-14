@@ -18,9 +18,11 @@ import {
   appendPolarRosePoints,
   appendVoxelSnapshots,
   appendTopologySnapshots,
+  appendMorphologyHistory,
+  upsertSpeciesCatalog,
   pruneTables,
 } from '@/services/persistence/db'
-import type { PriceTick, DspTick, PolarRosePoint, VoxelSnapshot, TopologySnapshotRow } from '@/services/persistence/db'
+import type { PriceTick, DspTick, PolarRosePoint, VoxelSnapshot, TopologySnapshotRow, MorphologyHistoryRow } from '@/services/persistence/db'
 import { fingerprintToVector } from '@/core/dsp/topology'
 import { computeShapeMetrics } from '@/core/dsp/shape-metrics'
 import { BINANCE_CONFIG } from '@/config/binance'
@@ -32,6 +34,7 @@ let dspTickBuffer: DspTick[] = []
 let polarRoseBuffer: PolarRosePoint[] = []
 let voxelBuffer: VoxelSnapshot[] = []
 let topologyBuffer: TopologySnapshotRow[] = []
+let morphologyBuffer: MorphologyHistoryRow[] = []
 
 export function useDspWorker() {
   const workerRef = useRef<Worker | null>(null)
@@ -161,6 +164,14 @@ export function useDspWorker() {
               kappa: msg.data.fingerprint.kappa,
               fingerprintVector: fingerprintToVector(msg.data.fingerprint),
             })
+            morphologyBuffer.push({
+              timestamp: msg.data.fingerprint.timestamp,
+              mean_curvature: msg.data.meanCurvature,
+              max_curvature: msg.data.maxCurvature,
+              curvature_concentration: msg.data.curvatureConcentration,
+              torsion_energy: msg.data.torsionEnergy,
+              species: msg.data.morphologySpecies,
+            })
             break
         }
       })
@@ -228,6 +239,23 @@ export function useDspWorker() {
 
       const topoBatch = topologyBuffer; topologyBuffer = []
       if (topoBatch.length > 0) appendTopologySnapshots(topoBatch).catch(logErr('topology_snapshots'))
+
+      const morphBatch = morphologyBuffer; morphologyBuffer = []
+      if (morphBatch.length > 0) appendMorphologyHistory(morphBatch).catch(logErr('morphology_history'))
+
+      const catalog = useMorphologyStore.getState().speciesCatalog
+      if (catalog.length > 0) {
+        upsertSpeciesCatalog(catalog.map((e) => ({
+          id: e.id,
+          count: e.count,
+          total_return: e.totalReturn,
+          wins: e.wins,
+          avg_curvature_concentration: e.avgCurvatureConcentration,
+          avg_h1_peak: e.avgH1Peak,
+          last_seen: e.lastSeen,
+          regime_returns: e.regimeReturns,
+        }))).catch(logErr('species_catalog'))
+      }
     }, 10_000)
 
     const pruneId = setInterval(() => {
