@@ -543,7 +543,7 @@ const MAX_DSP_TICKS = 10_000
 const MAX_POLAR_ROSE = 10_000
 const MAX_VOXEL_SNAPSHOTS = 5_000
 
-type PrunableTable = 'dsp_ticks' | 'polar_rose' | 'voxel_snapshots' | 'topology_snapshots'
+type PrunableTable = 'dsp_ticks' | 'polar_rose' | 'voxel_snapshots' | 'topology_snapshots' | 'morphology_history'
 
 async function pruneTable(table: PrunableTable, max: number): Promise<void> {
   const { count, error: countError } = await supabase
