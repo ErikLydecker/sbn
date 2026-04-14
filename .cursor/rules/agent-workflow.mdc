@@ -1,0 +1,83 @@
+---
+description: Autonomous agent workflow — branch, PR, merge, deploy. Agents ship their own code without human review.
+alwaysApply: true
+---
+
+# Autonomous Agent Workflow
+
+Agents are fully autonomous. They branch, code, open a PR, merge it, and Render auto-deploys. No human review gate.
+
+## Git Flow
+
+### 1. Branch
+
+Always work on a feature branch. Never push directly to `main`.
+
+```
+git checkout -b <linear-branch-name>
+```
+
+Use the branch name from the Linear issue (e.g., `eriklydecker/sbn-14-fix-persistent-502-errors`). If no Linear issue exists, use `agent/<short-description>`.
+
+### 2. Commit and Push
+
+```
+git add -A
+git commit -m "<concise summary of changes>"
+git push -u origin HEAD
+```
+
+Write clear commit messages in imperative mood. Reference the Linear issue ID in the message when applicable (e.g., `Fix WS race condition (SBN-15)`).
+
+### 3. Open a PR
+
+```
+gh pr create --title "<issue title>" --body "<summary with Linear link>"
+```
+
+The PR body should include:
+- What changed and why
+- Link to the Linear issue
+- Any risks or follow-up needed
+
+### 4. Merge
+
+Immediately squash-merge after creating the PR:
+
+```
+gh pr merge --squash --delete-branch
+```
+
+Do NOT wait for human review. Do NOT wait for CI unless branch protection requires it.
+
+### 5. Handle Failures
+
+If the merge fails (conflicts, branch protection, etc.):
+- Do NOT force-push or force-merge
+- Leave the PR open
+- Comment on the Linear issue explaining what blocked the merge
+- Set the Linear issue state to `Todo` (not `Done`)
+
+### 6. Post-Merge
+
+After a successful merge:
+- Comment on the Linear issue with the PR link and merged commit
+- Move the Linear issue to `Done`
+- Render will auto-deploy from `main` — no further action needed
+
+## Safety Model
+
+- **Render build** is the only deploy gate: `tsc -b && vite build`. If the build fails, the deploy is blocked and production stays on the last good deploy.
+- **No branch protection** — agents merge freely.
+- **PR audit trail** is preserved for every change. Every PR links to a Linear issue.
+- If the agent merges code that breaks the build, `main` will be in a broken state until a follow-up fix is merged. This is acceptable — production is unaffected.
+
+## Rules
+
+- ALWAYS use a feature branch — never commit directly to `main`.
+- ALWAYS open a PR — even for one-line changes. The PR is the audit trail.
+- ALWAYS squash-merge — keeps `main` history clean.
+- ALWAYS delete the branch after merge via `--delete-branch`.
+- NEVER force-push to `main`.
+- NEVER skip the PR step by pushing directly to `main`.
+- If a session only answers questions with no code changes, skip the entire git workflow.

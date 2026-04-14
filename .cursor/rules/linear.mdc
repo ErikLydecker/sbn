@@ -15,6 +15,14 @@ Every agent session MUST track its work in Linear using the `plugin-linear-linea
 - **Labels (type):** Bug, Feature, Improvement, refactor, docs, test, chore
 - **Label (source):** cursor-agent (always apply this label)
 
+## Delegation
+
+All issues MUST be delegated to the Cursor agent — never assign to a human user. This keeps the workflow fully automated.
+
+- Use `delegate: "Cursor"` on every `save_issue` call (both create and update).
+- Do NOT use `assignee: "me"` — the human owner is implicit via delegation.
+- The Cursor agent must be installed in the Linear workspace via the [Cursor integrations dashboard](https://www.cursor.com/dashboard/integrations).
+
 ## Workflow
 
 ### 1. Session Start — Create or Find an Issue
@@ -30,29 +38,47 @@ If a matching issue exists, reuse it. Otherwise create one:
 ```
 save_issue with title=<concise task summary>, description=<user request and goal>,
   team="SBN", project="SBN Platform", state="In Progress",
-  assignee="me", labels=["cursor-agent", <type label>]
+  delegate="Cursor", labels=["cursor-agent", <type label>]
 ```
 
 Pick the best type label: `Feature` for new functionality, `Bug` for fixes, `Improvement` for enhancements, `refactor` for restructuring, `docs` for documentation, `test` for tests, `chore` for config/tooling.
 
 ### 2. During Work — Sub-tasks if Scope Grows
 
-If the task expands into distinct sub-tasks, create child issues with `parentId` set to the main issue ID. Keep each child focused on one concern.
+If the task expands into distinct sub-tasks, create child issues with `parentId` set to the main issue ID and `delegate: "Cursor"`. Keep each child focused on one concern.
 
-### 3. Session End — Summarize and Close
+### 3. Session End — Ship and Close
 
-When all work is complete, before responding to the user:
+When all code changes are complete:
 
-1. **Add a summary comment** via `save_comment` on the issue:
+1. **Create a feature branch, commit, and push:**
+   ```
+   git checkout -b <branch-name>
+   git add -A && git commit -m "<summary>"
+   git push -u origin HEAD
+   ```
+
+2. **Open a PR** via `gh pr create` with a summary body linking the Linear issue.
+
+3. **Squash-merge the PR immediately:**
+   ```
+   gh pr merge --squash --delete-branch
+   ```
+   If merge fails (conflicts, etc.), leave the PR open and comment on the Linear issue explaining the blocker.
+
+4. **Add a summary comment** via `save_comment` on the issue:
    - Files modified and why
    - Key decisions or trade-offs
+   - PR link and merge status
    - Any follow-up work needed
-2. **Move to Done** via `save_issue` with `state="Done"`
+
+5. **Move to Done** via `save_issue` with `state="Done"` — only after a successful merge.
 
 ### Rules
 
 - Never create duplicate issues — always search first.
 - One issue per agent session unless sub-tasks are needed.
+- Always delegate to `"Cursor"` — never assign to a human user.
 - Keep titles short and descriptive (imperative mood: "Add X", "Fix Y", "Refactor Z").
 - Descriptions should capture the user's original request.
 - Always include the `cursor-agent` label so automated work is filterable.
