@@ -12,6 +12,12 @@ export interface ConnectionManagerCallbacks {
 
 const ENDPOINTS: readonly ConnectionSource[] = ['ws_primary', 'ws_fallback']
 
+/**
+ * Lower multiplier for code 1006 so first retries happen at ~500ms–1s
+ * instead of the standard 1s–2s, giving faster recovery from server kills.
+ */
+const ABNORMAL_CLOSE_BACKOFF_MULTIPLIER = 0.5
+
 function getEndpointUrl(source: ConnectionSource): string {
   return source === 'ws_primary'
     ? BINANCE_CONFIG.ws.primary
@@ -32,6 +38,15 @@ function computeBackoff(attempt: number): number {
 function closeCodeBackoffMultiplier(code: number): number {
   if (code === 1008 || code === 1013) return 3
   return 1
+}
+
+/**
+ * Abnormal closure (1006) typically means the server was killed without a
+ * close frame — e.g. Render instance recycling. We retry quickly on the
+ * alternate endpoint so the client recovers within a few seconds.
+ */
+function isAbnormalClosure(code: number): boolean {
+  return code === 1006
 }
 
 export class ConnectionManager {
@@ -164,6 +179,12 @@ export class ConnectionManager {
     if (code === 1001) {
       this.endpointIdx++
       this.scheduleRetry(0)
+      return
+    }
+
+    if (isAbnormalClosure(code)) {
+      this.endpointIdx++
+      this.scheduleRetry(ABNORMAL_CLOSE_BACKOFF_MULTIPLIER)
       return
     }
 

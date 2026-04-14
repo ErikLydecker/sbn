@@ -5,6 +5,7 @@ import { WebSocketServer, WebSocket } from 'ws'
 
 const PORT = parseInt(process.env.PORT || '10000', 10)
 const DIST = join(import.meta.dirname, 'dist')
+const START_TIME = Date.now()
 
 const MIME = {
   '.html': 'text/html',
@@ -18,6 +19,9 @@ const MIME = {
   '.woff': 'font/woff',
   '.map': 'application/json',
 }
+
+let activeConnections = 0
+let totalConnectionsServed = 0
 
 const BINANCE_WS = 'wss://stream.binance.com:9443/ws'
 const BINANCE_REST_ENDPOINTS = [
@@ -50,6 +54,18 @@ async function fetchWithFallback(path, search) {
 
 const server = createServer((req, res) => {
   const url = new URL(req.url || '/', `http://localhost:${PORT}`)
+
+  if (url.pathname === '/health') {
+    const body = JSON.stringify({
+      status: 'ok',
+      uptimeMs: Date.now() - START_TIME,
+      activeConnections,
+      totalConnectionsServed,
+    })
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(body)
+    return
+  }
 
   if (url.pathname.startsWith('/api-binance/')) {
     const path = url.pathname.replace('/api-binance', '')
@@ -114,8 +130,19 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (clientWs) => {
     const target = `${BINANCE_WS}/${stream}`
     console.log('[ws] client connected, opening upstream:', target)
+
+    activeConnections++
+    totalConnectionsServed++
+
     const upstream = new WebSocket(target)
     let msgCount = 0
+    let closed = false
+
+    const cleanup = () => {
+      if (closed) return
+      closed = true
+      activeConnections--
+    }
 
     upstream.on('open', () => {
       console.log('[ws] upstream open')
@@ -135,6 +162,7 @@ server.on('upgrade', (req, socket, head) => {
     })
     upstream.on('close', (code) => {
       console.log('[ws] upstream closed, code:', code, 'after', msgCount, 'msgs')
+      cleanup()
       clientWs.close()
     })
     clientWs.on('error', (err) => {
@@ -143,6 +171,7 @@ server.on('upgrade', (req, socket, head) => {
     })
     clientWs.on('close', (code) => {
       console.log('[ws] client closed, code:', code)
+      cleanup()
       upstream.close()
     })
   })
@@ -150,4 +179,14 @@ server.on('upgrade', (req, socket, head) => {
 
 server.listen(PORT, () => {
   console.log(`SBN proxy server listening on port ${PORT}`)
+})
+
+process.on('SIGTERM', () => {
+  console.log('[shutdown] SIGTERM received, closing gracefully…')
+  wss.clients.forEach((ws) => ws.close(1001, 'server shutting down'))
+  server.close(() => {
+    console.log('[shutdown] HTTP server closed')
+    process.exit(0)
+  })
+  setTimeout(() => process.exit(0), 5_000)
 })
