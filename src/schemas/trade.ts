@@ -20,6 +20,7 @@ export const OpenPositionSchema = z.object({
   entryEquity: z.number().positive(),
   entryKappa: z.number().optional(),
   entryRBar: z.number().optional(),
+  entryMorphologySpecies: z.number().int().optional(),
 })
 
 export type OpenPosition = z.infer<typeof OpenPositionSchema>
@@ -37,6 +38,7 @@ export const ClosedTradeSchema = z.object({
   paramVector: z.array(z.number()),
   entryKappa: z.number().optional(),
   entryRBar: z.number().optional(),
+  entryMorphologySpecies: z.number().int().optional(),
 })
 
 export type ClosedTrade = z.infer<typeof ClosedTradeSchema>

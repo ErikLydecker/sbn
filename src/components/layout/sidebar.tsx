@@ -10,6 +10,7 @@ import {
   Orbit,
   Box,
   Shapes,
+  Fingerprint,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -21,6 +22,7 @@ const NAV_ITEMS: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/analytics', label: 'Analytics', icon: BarChart3 },
   { to: '/geometry', label: 'Geometry', icon: Hexagon },
   { to: '/topology', label: 'Topology', icon: Orbit },
+  { to: '/morphology', label: 'Morphology', icon: Fingerprint },
   { to: '/shape', label: 'Shape', icon: Shapes },
   { to: '/voxel', label: 'Voxel', icon: Box },
   { to: '/optimization', label: 'Optimization', icon: BrainCircuit },

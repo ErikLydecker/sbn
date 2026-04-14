@@ -14,6 +14,7 @@ import { Route as TopologyRouteImport } from './app/routes/topology'
 import { Route as ShapeRouteImport } from './app/routes/shape'
 import { Route as SettingsRouteImport } from './app/routes/settings'
 import { Route as OptimizationRouteImport } from './app/routes/optimization'
+import { Route as MorphologyRouteImport } from './app/routes/morphology'
 import { Route as HistoryRouteImport } from './app/routes/history'
 import { Route as GeometryRouteImport } from './app/routes/geometry'
 import { Route as BacktestRouteImport } from './app/routes/backtest'
@@ -43,6 +44,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const OptimizationRoute = OptimizationRouteImport.update({
   id: '/optimization',
   path: '/optimization',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MorphologyRoute = MorphologyRouteImport.update({
+  id: '/morphology',
+  path: '/morphology',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HistoryRoute = HistoryRouteImport.update({
@@ -77,6 +83,7 @@ export interface FileRoutesByFullPath {
   '/backtest': typeof BacktestRoute
   '/geometry': typeof GeometryRoute
   '/history': typeof HistoryRoute
+  '/morphology': typeof MorphologyRoute
   '/optimization': typeof OptimizationRoute
   '/settings': typeof SettingsRoute
   '/shape': typeof ShapeRoute
@@ -89,6 +96,7 @@ export interface FileRoutesByTo {
   '/backtest': typeof BacktestRoute
   '/geometry': typeof GeometryRoute
   '/history': typeof HistoryRoute
+  '/morphology': typeof MorphologyRoute
   '/optimization': typeof OptimizationRoute
   '/settings': typeof SettingsRoute
   '/shape': typeof ShapeRoute
@@ -102,6 +110,7 @@ export interface FileRoutesById {
   '/backtest': typeof BacktestRoute
   '/geometry': typeof GeometryRoute
   '/history': typeof HistoryRoute
+  '/morphology': typeof MorphologyRoute
   '/optimization': typeof OptimizationRoute
   '/settings': typeof SettingsRoute
   '/shape': typeof ShapeRoute
@@ -116,6 +125,7 @@ export interface FileRouteTypes {
     | '/backtest'
     | '/geometry'
     | '/history'
+    | '/morphology'
     | '/optimization'
     | '/settings'
     | '/shape'
@@ -128,6 +138,7 @@ export interface FileRouteTypes {
     | '/backtest'
     | '/geometry'
     | '/history'
+    | '/morphology'
     | '/optimization'
     | '/settings'
     | '/shape'
@@ -140,6 +151,7 @@ export interface FileRouteTypes {
     | '/backtest'
     | '/geometry'
     | '/history'
+    | '/morphology'
     | '/optimization'
     | '/settings'
     | '/shape'
@@ -153,6 +165,7 @@ export interface RootRouteChildren {
   BacktestRoute: typeof BacktestRoute
   GeometryRoute: typeof GeometryRoute
   HistoryRoute: typeof HistoryRoute
+  MorphologyRoute: typeof MorphologyRoute
   OptimizationRoute: typeof OptimizationRoute
   SettingsRoute: typeof SettingsRoute
   ShapeRoute: typeof ShapeRoute
@@ -195,6 +208,13 @@ declare module '@tanstack/react-router' {
       path: '/optimization'
       fullPath: '/optimization'
       preLoaderRoute: typeof OptimizationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/morphology': {
+      id: '/morphology'
+      path: '/morphology'
+      fullPath: '/morphology'
+      preLoaderRoute: typeof MorphologyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/history': {
@@ -241,6 +261,7 @@ const rootRouteChildren: RootRouteChildren = {
   BacktestRoute: BacktestRoute,
   GeometryRoute: GeometryRoute,
   HistoryRoute: HistoryRoute,
+  MorphologyRoute: MorphologyRoute,
   OptimizationRoute: OptimizationRoute,
   SettingsRoute: SettingsRoute,
   ShapeRoute: ShapeRoute,

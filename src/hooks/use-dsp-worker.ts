@@ -8,6 +8,7 @@ import { useSettingsStore } from '@/stores/settings.store'
 import { useCoherenceHistoryStore } from '@/stores/coherence-history.store'
 import { useBarTimerStore } from '@/stores/bar-timer.store'
 import { useTopologyStore } from '@/stores/topology.store'
+import { useMorphologyStore } from '@/stores/morphology.store'
 import { ConnectionManager } from '@/services/binance/connection-manager'
 import { fetchHistoricalKlines } from '@/services/binance/klines'
 import {
@@ -50,6 +51,8 @@ export function useDspWorker() {
   const setBarTiming = useBarTimerStore((s) => s.setTiming)
   const pushTopology = useTopologyStore((s) => s.push)
   const pushShape = useTopologyStore((s) => s.pushShape)
+  const pushMorphology = useMorphologyStore((s) => s.push)
+  const recordMorphologyTrade = useMorphologyStore((s) => s.recordTradeResult)
 
   const rawWindow = useSettingsStore((s) => s.rawWindow)
   const manualK = useSettingsStore((s) => s.manualFrequencyK)
@@ -119,9 +122,19 @@ export function useDspWorker() {
               }
             }
             break
-          case 'portfolio':
+          case 'portfolio': {
+            const prevTradeCount = usePortfolioStore.getState().trades.length
             updatePortfolio(msg.data)
+            if (msg.data.trades.length > prevTradeCount) {
+              for (let ti = prevTradeCount; ti < msg.data.trades.length; ti++) {
+                const t = msg.data.trades[ti]!
+                if (t.entryMorphologySpecies !== undefined && t.entryMorphologySpecies >= 0) {
+                  recordMorphologyTrade(t.entryMorphologySpecies, t.regimeId, t.returnPct)
+                }
+              }
+            }
             break
+          }
           case 'geometry':
             setGeometry(msg.data)
             break
@@ -133,6 +146,7 @@ export function useDspWorker() {
             break
           case 'topology':
             pushTopology(msg.data)
+            pushMorphology(msg.data)
             topologyBuffer.push({
               timestamp: msg.data.fingerprint.timestamp,
               windingNumber: msg.data.windingNumber,
@@ -182,7 +196,7 @@ export function useDspWorker() {
       workerRef.current = null
       connRef.current = null
     }
-  }, [pushPrice, setCandles, setRaw, setSmooth, setEventBarCount, updatePortfolio, setGeometry, setConnectionStatus, setConnectionHealth, timeframe, backfillToWorker, pushTopology, pushShape])
+  }, [pushPrice, setCandles, setRaw, setSmooth, setEventBarCount, updatePortfolio, setGeometry, setConnectionStatus, setConnectionHealth, timeframe, backfillToWorker, pushTopology, pushShape, pushMorphology, recordMorphologyTrade])
 
   useEffect(() => {
     const worker = workerRef.current

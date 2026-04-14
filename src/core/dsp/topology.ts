@@ -1,4 +1,7 @@
 import { DSP_CONFIG } from '@/config/dsp'
+import type { CurvatureStats } from './curvature'
+import type { PersistenceFeatures } from './persistence'
+import type { MorphologySignature } from './morphology'
 
 export type TopologyClass = 'stable_loop' | 'unstable_loop' | 'drift' | 'chaotic'
 
@@ -13,6 +16,23 @@ export interface TopologyFingerprint {
   structureScore: number
   topologyClass: TopologyClass
   kappa: number
+  // Differential geometry
+  meanCurvature: number
+  maxCurvature: number
+  curvatureVariance: number
+  curvatureSkewness: number
+  curvatureConcentration: number
+  meanTorsion: number
+  torsionEnergy: number
+  // Persistence
+  h0Persistence: number
+  h1Peak: number
+  h1Persistence: number
+  fragmentationRate: number
+  // Morphology
+  fourierDescriptors: number[]
+  // Species classification
+  morphologySpecies: number
 }
 
 export interface FingerprintMatch {
@@ -20,11 +40,17 @@ export interface FingerprintMatch {
   similarity: number
 }
 
+export interface SpeciesCentroid {
+  center: number[]
+  count: number
+}
+
 export interface TopologyState {
   windingHistory: number[]
   circulationHistory: number[]
   closureHistory: number[]
   fingerprintHistory: TopologyFingerprint[]
+  speciesCentroids: SpeciesCentroid[]
 }
 
 export interface TopologyResult {
@@ -39,6 +65,7 @@ export interface TopologyResult {
   fingerprint: TopologyFingerprint
   matchedFingerprints: FingerprintMatch[]
   updatedState: TopologyState
+  morphologySpecies: number
 }
 
 export function createInitialTopologyState(): TopologyState {
@@ -47,6 +74,7 @@ export function createInitialTopologyState(): TopologyState {
     circulationHistory: [],
     closureHistory: [],
     fingerprintHistory: [],
+    speciesCentroids: [],
   }
 }
 
@@ -214,6 +242,18 @@ export function fingerprintToVector(fp: TopologyFingerprint): number[] {
     fp.recurrenceRate,
     fp.structureScore,
     fp.kappa,
+    fp.meanCurvature,
+    fp.maxCurvature,
+    fp.curvatureVariance,
+    fp.curvatureSkewness,
+    fp.curvatureConcentration,
+    fp.meanTorsion,
+    fp.torsionEnergy,
+    fp.h0Persistence,
+    fp.h1Peak,
+    fp.h1Persistence,
+    fp.fragmentationRate,
+    ...(fp.fourierDescriptors ?? []),
   ]
 }
 
@@ -264,6 +304,49 @@ export interface TopologyInput {
   structureScore: number
   kappa: number
   timestamp: number
+  curvatureStats?: CurvatureStats
+  persistenceFeatures?: PersistenceFeatures
+  morphologySignature?: MorphologySignature
+}
+
+/**
+ * Online k-means: assign a point to the nearest centroid, then update that centroid.
+ * If fewer than K centroids exist, create a new one.
+ */
+function assignSpecies(
+  vec: number[],
+  centroids: SpeciesCentroid[],
+  k: number,
+): { species: number; centroids: SpeciesCentroid[] } {
+  if (centroids.length < k) {
+    const newCentroids = [...centroids, { center: [...vec], count: 1 }]
+    return { species: newCentroids.length - 1, centroids: newCentroids }
+  }
+
+  let bestDist = Infinity
+  let bestIdx = 0
+  for (let i = 0; i < centroids.length; i++) {
+    let d2 = 0
+    const c = centroids[i]!.center
+    for (let j = 0; j < vec.length && j < c.length; j++) {
+      const diff = vec[j]! - c[j]!
+      d2 += diff * diff
+    }
+    if (d2 < bestDist) {
+      bestDist = d2
+      bestIdx = i
+    }
+  }
+
+  const updated = centroids.map((c, i) => {
+    if (i !== bestIdx) return c
+    const newCount = c.count + 1
+    const alpha = 1 / newCount
+    const newCenter = c.center.map((v, j) => v * (1 - alpha) + (vec[j] ?? 0) * alpha)
+    return { center: newCenter, count: newCount }
+  })
+
+  return { species: bestIdx, centroids: updated }
 }
 
 /**
@@ -275,6 +358,7 @@ export function computeTopology(
 ): TopologyResult {
   const s = state ?? createInitialTopologyState()
   const { maxFingerprintHistory, stabilityWindow } = DSP_CONFIG.topology
+  const { speciesK } = DSP_CONFIG.morphology
 
   const windingNumber = computeWindingNumber(input.pts)
   const absWinding = Math.abs(windingNumber)
@@ -286,12 +370,17 @@ export function computeTopology(
     circulationHistory: [...s.circulationHistory, circulation].slice(-stabilityWindow),
     closureHistory: [...s.closureHistory, loopClosure].slice(-stabilityWindow),
     fingerprintHistory: s.fingerprintHistory,
+    speciesCentroids: s.speciesCentroids,
   }
 
   const topologyStability = computeTopologyStability(updatedState)
   const topologyClass = classifyTopology(absWinding, topologyStability, loopClosure)
   const topologyScore = computeTopologyScore(absWinding, circulation, loopClosure, topologyStability)
   const isLoop = absWinding >= DSP_CONFIG.topology.windingLoopThreshold
+
+  const cs = input.curvatureStats
+  const pf = input.persistenceFeatures
+  const ms = input.morphologySignature
 
   const fingerprint: TopologyFingerprint = {
     timestamp: input.timestamp,
@@ -304,7 +393,25 @@ export function computeTopology(
     structureScore: input.structureScore,
     topologyClass,
     kappa: input.kappa,
+    meanCurvature: cs?.meanCurvature ?? 0,
+    maxCurvature: cs?.maxCurvature ?? 0,
+    curvatureVariance: cs?.curvatureVariance ?? 0,
+    curvatureSkewness: cs?.curvatureSkewness ?? 0,
+    curvatureConcentration: cs?.curvatureConcentration ?? 0,
+    meanTorsion: cs?.meanTorsion ?? 0,
+    torsionEnergy: cs?.torsionEnergy ?? 0,
+    h0Persistence: pf?.h0Persistence ?? 0,
+    h1Peak: pf?.h1Peak ?? 0,
+    h1Persistence: pf?.h1Persistence ?? 0,
+    fragmentationRate: pf?.fragmentationRate ?? 0,
+    fourierDescriptors: ms?.fourierDescriptors ?? [],
+    morphologySpecies: -1,
   }
+
+  const vec = fingerprintToVector(fingerprint)
+  const speciesResult = assignSpecies(vec, updatedState.speciesCentroids, speciesK)
+  fingerprint.morphologySpecies = speciesResult.species
+  updatedState.speciesCentroids = speciesResult.centroids
 
   const matchedFingerprints = findFingerprintMatches(fingerprint, updatedState.fingerprintHistory)
 
@@ -322,5 +429,6 @@ export function computeTopology(
     fingerprint,
     matchedFingerprints,
     updatedState,
+    morphologySpecies: fingerprint.morphologySpecies,
   }
 }

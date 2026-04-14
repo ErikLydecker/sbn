@@ -12,6 +12,9 @@ import { pcaProject3 } from './pca3'
 import { computeRecurrence } from './recurrence'
 import { computeTopology } from './topology'
 import type { TopologyState } from './topology'
+import { computeCurvatureProfile, computeCurvatureStats } from './curvature'
+import { computePersistence, buildDistanceMatrix } from './persistence'
+import { computeMorphologySignature } from './morphology'
 import { vmFilter } from './von-mises'
 import { buildHmmTransition, hmmForward, hmmToClockPos } from './hmm'
 import type { HmmAlpha } from './hmm'
@@ -251,6 +254,30 @@ export function analyseSmooth(
   const hmmPSelf = newState.hmmA[0]![0]!
 
   const structScore = projected.length >= 10 ? computeStructureScore(projected) : 0
+
+  // Higher-order geometry: curvature, persistence, morphology
+  const curvProfile = projected.length >= 10
+    ? computeCurvatureProfile(projected)
+    : undefined
+  const curvStats = curvProfile
+    ? computeCurvatureStats(curvProfile)
+    : undefined
+
+  const distMatrix = projected.length >= 10
+    ? buildDistanceMatrix(projected)
+    : undefined
+  const persistResult = distMatrix
+    ? computePersistence(distMatrix, projected.length, DSP_CONFIG.morphology.bettiSweepSteps)
+    : undefined
+
+  const morphSig = projected.length >= 10
+    ? computeMorphologySignature(
+        projected,
+        DSP_CONFIG.morphology.arcLengthSamples,
+        DSP_CONFIG.morphology.fourierHarmonics,
+      )
+    : undefined
+
   let topoResult: ReturnType<typeof computeTopology> | undefined
   if (projected.length >= 10) {
     topoResult = computeTopology(
@@ -261,6 +288,9 @@ export function analyseSmooth(
         structureScore: structScore,
         kappa,
         timestamp: timestamps ? timestamps[timestamps.length - 1]! : Date.now(),
+        curvatureStats: curvStats,
+        persistenceFeatures: persistResult,
+        morphologySignature: morphSig,
       },
       newState.topologyState,
     )
@@ -320,6 +350,25 @@ export function analyseSmooth(
       topologyStability: topoResult?.topologyStability,
       topologyScore: topoResult?.topologyScore,
       topologyClass: topoResult?.topologyClass,
+
+      morphologySpecies: topoResult?.morphologySpecies,
+      curvatureProfile: curvProfile?.kappa,
+      torsionProfile: curvProfile?.tau,
+      meanCurvature: curvStats?.meanCurvature,
+      maxCurvature: curvStats?.maxCurvature,
+      curvatureVariance: curvStats?.curvatureVariance,
+      curvatureConcentration: curvStats?.curvatureConcentration,
+      meanTorsion: curvStats?.meanTorsion,
+      torsionEnergy: curvStats?.torsionEnergy,
+      h0Persistence: persistResult?.h0Persistence,
+      h1Peak: persistResult?.h1Peak,
+      h1Persistence: persistResult?.h1Persistence,
+      fragmentationRate: persistResult?.fragmentationRate,
+      bettiH0: persistResult?.bettiCurves.h0,
+      bettiH1: persistResult?.bettiCurves.h1,
+      bettiThresholds: persistResult?.bettiCurves.thresholds,
+      fourierDescriptors: morphSig?.fourierDescriptors,
+      curvatureSignature: morphSig?.curvatureSignature,
 
       ppc,
       hurst,

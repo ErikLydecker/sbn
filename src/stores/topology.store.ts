@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { TopologyFingerprint, FingerprintMatch, TopologyClass } from '@/core/dsp/topology'
+import { fingerprintToVector } from '@/core/dsp/topology'
 import type { TopologySnapshotRow } from '@/services/persistence/db'
 import type { ShapeMetrics } from '@/core/dsp/shape-metrics'
 
@@ -57,15 +58,7 @@ export const useTopologyStore = create<TopologyStoreState>((set) => ({
         topologyClass: result.fingerprint.topologyClass,
         topologyScore: result.topologyScore,
         kappa: result.fingerprint.kappa,
-        fingerprintVector: [
-          result.fingerprint.absWinding,
-          result.fingerprint.circulation,
-          result.fingerprint.loopClosure,
-          result.fingerprint.corrDim,
-          result.fingerprint.recurrenceRate,
-          result.fingerprint.structureScore,
-          result.fingerprint.kappa,
-        ],
+        fingerprintVector: fingerprintToVector(result.fingerprint),
       }].slice(-MAX_FINGERPRINTS),
     }))
   },

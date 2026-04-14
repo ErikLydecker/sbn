@@ -266,6 +266,15 @@ function runAnalysis(price: number) {
     }
 
     if (!sr.isBootstrapping && sr.topologyScore !== undefined) {
+      const latestFp = smoothState.topologyState?.fingerprintHistory[smoothState.topologyState.fingerprintHistory.length - 1]
+      const defaultFp = {
+        timestamp: Date.now(), windingNumber: 0, absWinding: 0, circulation: 0, loopClosure: 0,
+        corrDim: 0, recurrenceRate: 0, structureScore: 0, topologyClass: 'drift' as const, kappa: 0,
+        meanCurvature: 0, maxCurvature: 0, curvatureVariance: 0, curvatureSkewness: 0,
+        curvatureConcentration: 0, meanTorsion: 0, torsionEnergy: 0,
+        h0Persistence: 0, h1Peak: 0, h1Persistence: 0, fragmentationRate: 0,
+        fourierDescriptors: [] as number[], morphologySpecies: -1,
+      }
       post({
         type: 'topology',
         data: {
@@ -277,11 +286,26 @@ function runAnalysis(price: number) {
           topologyScore: sr.topologyScore,
           topologyClass: sr.topologyClass ?? 'drift',
           isLoop: (sr.absWinding ?? 0) >= DSP_CONFIG.topology.windingLoopThreshold,
-          fingerprint: smoothState.topologyState?.fingerprintHistory[smoothState.topologyState.fingerprintHistory.length - 1] ?? {
-            timestamp: Date.now(), windingNumber: 0, absWinding: 0, circulation: 0, loopClosure: 0,
-            corrDim: 0, recurrenceRate: 0, structureScore: 0, topologyClass: 'drift' as const, kappa: 0,
-          },
+          fingerprint: latestFp ?? defaultFp,
           matchedFingerprints: [],
+          morphologySpecies: sr.morphologySpecies ?? -1,
+          curvatureProfile: sr.curvatureProfile,
+          torsionProfile: sr.torsionProfile,
+          meanCurvature: sr.meanCurvature ?? 0,
+          maxCurvature: sr.maxCurvature ?? 0,
+          curvatureVariance: sr.curvatureVariance ?? 0,
+          curvatureConcentration: sr.curvatureConcentration ?? 0,
+          meanTorsion: sr.meanTorsion ?? 0,
+          torsionEnergy: sr.torsionEnergy ?? 0,
+          h0Persistence: sr.h0Persistence ?? 0,
+          h1Peak: sr.h1Peak ?? 0,
+          h1Persistence: sr.h1Persistence ?? 0,
+          fragmentationRate: sr.fragmentationRate ?? 0,
+          bettiH0: sr.bettiH0,
+          bettiH1: sr.bettiH1,
+          bettiThresholds: sr.bettiThresholds,
+          fourierDescriptors: sr.fourierDescriptors,
+          curvatureSignature: sr.curvatureSignature,
         },
       })
     }
@@ -298,6 +322,8 @@ function runAnalysis(price: number) {
         tDom: smoothState.tDom,
         topologyScore: sr.topologyScore ?? 0,
         topologyClass: sr.topologyClass ?? 'drift',
+        morphologySpecies: sr.morphologySpecies ?? -1,
+        curvatureConcentration: sr.curvatureConcentration ?? 0,
       }
       portfolioState = portfolioTick(portfolioState, snapshot)
 

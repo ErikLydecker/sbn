@@ -81,5 +81,12 @@ export const DSP_CONFIG = {
     fingerprintSimilarityThreshold: 0.85,
     maxFingerprintHistory: 500,
   },
+  morphology: {
+    arcLengthSamples: 32,
+    fourierHarmonics: 8,
+    bettiSweepSteps: 20,
+    speciesK: 6,
+    speciesMaxHistory: 200,
+  },
   analysisIntervalMs: 300,
 } as const

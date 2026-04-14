@@ -34,6 +34,7 @@ export function shouldEnter(
   kappaPersistence: number,
   topologyScore?: number,
   hurst?: number,
+  curvatureConcentration?: number,
 ): boolean {
   if (cooldowns[regimeId]! > 0) return false
   const phase = Math.floor(regimeId / 2)
@@ -48,6 +49,7 @@ export function shouldEnter(
     if (kappa < TRADING_CONFIG.kappaFloor) return false
     if (kappaPersistence < TRADING_CONFIG.kappaPersistenceBars) return false
     if (hurst !== undefined && hurst > TRADING_CONFIG.hurstTrendThreshold) return false
+    if (curvatureConcentration !== undefined && curvatureConcentration < TRADING_CONFIG.curvatureConcentrationFloor) return false
   }
 
   const dir = regimeDirection(regimeId)
@@ -65,6 +67,11 @@ export function shouldEnter(
   }
 
   return true
+}
+
+export function shapeConfidence(curvatureConcentration: number): number {
+  const { shapeConfidenceSigmoidCenter: c, shapeConfidenceSigmoidSteepness: s } = TRADING_CONFIG
+  return 1 / (1 + Math.exp(-s * (curvatureConcentration - c)))
 }
 
 export type ExitReason = 'stop' | 'regime_flip' | 'phase_target'

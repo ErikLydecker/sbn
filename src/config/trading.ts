@@ -44,6 +44,9 @@ export const TRADING_CONFIG = {
   topologySigmoidCenter: 0.5,
   topologySigmoidSteepness: 8,
   hurstTrendThreshold: 0.55,
+  curvatureConcentrationFloor: 0.3,
+  shapeConfidenceSigmoidCenter: 0.5,
+  shapeConfidenceSigmoidSteepness: 6,
 } as const
 
 export type ParamName = (typeof TRADING_CONFIG.paramNames)[number]

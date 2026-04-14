@@ -6,7 +6,7 @@ import { createGp, gpAddObservation, restoreGp } from './gaussian-process'
 import type { PersistedGpState, PersistedPortfolio } from '@/services/persistence/db'
 import { ucbAcquire, decodeParams } from './ucb'
 import { classifyRegime, regimeDirection } from './regimes'
-import { shouldEnter, shouldExit, kappaConfidence, topologyConfidence } from './signals'
+import { shouldEnter, shouldExit, kappaConfidence, topologyConfidence, shapeConfidence } from './signals'
 import { circDiff } from '@/core/math/circular'
 import { TRADING_CONFIG } from '@/config/trading'
 
@@ -85,6 +85,8 @@ export interface ClockSnapshot {
   tDom: number
   topologyScore: number
   topologyClass: string
+  morphologySpecies: number
+  curvatureConcentration: number
 }
 
 export function portfolioTick(
@@ -131,8 +133,8 @@ export function portfolioTick(
     const params = decodeParams(xNorm)
     const dir = regimeDirection(regimeId)
 
-    if (shouldEnter(regimeId, vel, next.clockAccel, snapshot.kappa, params, next.cooldowns, snapshot.alpha, next.kappaPersistence, snapshot.topologyScore, snapshot.hurst)) {
-      openTrade(next, regimeId, dir as TradeDirection, snapshot.price, snapshot.clockPos, xNorm, params, snapshot.kappa, snapshot.rBar, snapshot.topologyScore)
+    if (shouldEnter(regimeId, vel, next.clockAccel, snapshot.kappa, params, next.cooldowns, snapshot.alpha, next.kappaPersistence, snapshot.topologyScore, snapshot.hurst, snapshot.curvatureConcentration)) {
+      openTrade(next, regimeId, dir as TradeDirection, snapshot.price, snapshot.clockPos, xNorm, params, snapshot.kappa, snapshot.rBar, snapshot.topologyScore, snapshot.curvatureConcentration, snapshot.morphologySpecies)
     }
   }
 
@@ -170,6 +172,8 @@ function openTrade(
   kappa: number,
   rBar: number,
   topoScore?: number,
+  curvConc?: number,
+  species?: number,
 ): void {
   const sizeFrac = params[1]!
   const stop = params[2]!
@@ -179,7 +183,8 @@ function openTrade(
   const isTurning = phase === 1 || phase === 3
   const kappaScale = isTurning ? kappaConfidence(kappa) : 1
   const topoScale = topoScore !== undefined ? topologyConfidence(topoScore) : 1
-  const confScale = kappaScale * topoScale
+  const shapeScale = (isTurning && curvConc !== undefined) ? shapeConfidence(curvConc) : 1
+  const confScale = kappaScale * topoScale * shapeScale
   const sizeUsd = state.equity * sizeFrac * confScale
 
   state.position = {
@@ -195,6 +200,7 @@ function openTrade(
     entryEquity: state.equity,
     entryKappa: kappa,
     entryRBar: rBar,
+    entryMorphologySpecies: species,
   }
 }
 
@@ -258,6 +264,7 @@ function closeTrade(
     paramVector: pos.paramVector,
     entryKappa: pos.entryKappa,
     entryRBar: pos.entryRBar,
+    entryMorphologySpecies: pos.entryMorphologySpecies,
   }
 
   state.trades = [...state.trades, trade]

@@ -92,6 +92,24 @@ export interface TopologyWorkerData {
   isLoop: boolean
   fingerprint: TopologyFingerprint
   matchedFingerprints: FingerprintMatch[]
+  morphologySpecies: number
+  curvatureProfile?: number[]
+  torsionProfile?: number[]
+  meanCurvature: number
+  maxCurvature: number
+  curvatureVariance: number
+  curvatureConcentration: number
+  meanTorsion: number
+  torsionEnergy: number
+  h0Persistence: number
+  h1Peak: number
+  h1Persistence: number
+  fragmentationRate: number
+  bettiH0?: number[]
+  bettiH1?: number[]
+  bettiThresholds?: number[]
+  fourierDescriptors?: number[]
+  curvatureSignature?: number[]
 }
 
 export interface BarTimingData {
