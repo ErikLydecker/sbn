@@ -1,6 +1,9 @@
 import { useMemo } from 'react'
 import { useCrsReadinessStore } from '@/stores/crs-readiness.store'
+import { usePortfolioStore } from '@/stores/portfolio.store'
+import { usePriceStore } from '@/stores/price.store'
 import { REGIME_DEFINITIONS } from '@/schemas/regime'
+import { PositionBanner } from '@/components/panels/position-banner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import type { CrsSnapshotData } from '@/workers/dsp.messages'
@@ -141,6 +144,17 @@ export function ReadinessPage() {
   const reversed = useMemo(() => [...snapshots].reverse(), [snapshots])
   const latest = reversed[0]
 
+  const equity = usePortfolioStore((s) => s.equity)
+  const initialEquity = usePortfolioStore((s) => s.initialEquity)
+  const position = usePortfolioStore((s) => s.position)
+  const trades = usePortfolioStore((s) => s.trades)
+  const latestPrice = usePriceStore((s) => s.latestPrice)
+
+  const unrealisedPnl = position && latestPrice
+    ? ((latestPrice - position.entryPrice) / position.entryPrice) * position.direction * position.sizeUsd
+    : 0
+  const totalReturn = ((equity + unrealisedPnl - initialEquity) / initialEquity) * 100
+
   return (
     <div className="space-y-3">
       <div>
@@ -150,6 +164,27 @@ export function ReadinessPage() {
             Composite Readiness Score · per bar · {snapshots.length} snapshots
           </span>
         </h2>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto_auto_auto]">
+        <PositionBanner position={position} currentPrice={latestPrice ?? 0} />
+        <div className="rounded-lg border border-[rgba(255,255,255,0.05)] bg-[#0f1011] px-4 py-3">
+          <div className="text-[10px] font-[510] uppercase tracking-[0.05em] text-[#62666d]">Equity</div>
+          <div className="mt-1 font-mono text-[18px] font-[590] text-[#f7f8f8]">${equity.toFixed(2)}</div>
+        </div>
+        <div className="rounded-lg border border-[rgba(255,255,255,0.05)] bg-[#0f1011] px-4 py-3">
+          <div className="text-[10px] font-[510] uppercase tracking-[0.05em] text-[#62666d]">Unrealised P&L</div>
+          <div className={cn('mt-1 font-mono text-[18px] font-[590]', unrealisedPnl >= 0 ? 'text-[#50dd80]' : 'text-[#ff5050]')}>
+            {unrealisedPnl >= 0 ? '+' : ''}{unrealisedPnl.toFixed(2)}
+          </div>
+        </div>
+        <div className="rounded-lg border border-[rgba(255,255,255,0.05)] bg-[#0f1011] px-4 py-3">
+          <div className="text-[10px] font-[510] uppercase tracking-[0.05em] text-[#62666d]">Total Return</div>
+          <div className={cn('mt-1 font-mono text-[18px] font-[590]', totalReturn >= 0 ? 'text-[#50dd80]' : 'text-[#ff5050]')}>
+            {totalReturn >= 0 ? '+' : ''}{totalReturn.toFixed(2)}%
+          </div>
+          <div className="mt-0.5 text-[10px] text-[#8a8f98]">{trades.length} trades</div>
+        </div>
       </div>
 
       {latest && <LatestSummary snap={latest} />}
