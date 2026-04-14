@@ -7,7 +7,9 @@ const PORT = parseInt(process.env.PORT || '10000', 10)
 const DIST = join(import.meta.dirname, 'dist')
 const BOOT_TIME = Date.now()
 const REQUEST_TIMEOUT_MS = 5_000
-const CACHE_TTL_MS = 10_000
+const DEFAULT_CACHE_TTL_MS = 10_000
+const KLINES_CACHE_TTL_MS = 45_000
+const CACHE_MAX_ENTRIES = 100
 const SHUTDOWN_GRACE_MS = 10_000
 const UPSTREAM_CONNECT_TIMEOUT_MS = 5_000
 
@@ -36,17 +38,38 @@ const BINANCE_REST_ENDPOINTS = [
   'https://api.binance.com',
 ]
 
-/** Simple in-memory cache for REST proxy responses */
+/** In-memory cache for REST proxy responses with endpoint-aware TTL */
 const restCache = new Map()
+
+function getTtlForPath(path) {
+  if (path.startsWith('/api/v3/klines')) return KLINES_CACHE_TTL_MS
+  return DEFAULT_CACHE_TTL_MS
+}
+
+function evictExpired() {
+  const now = Date.now()
+  for (const [key, entry] of restCache) {
+    if (now - entry.ts > entry.ttl) restCache.delete(key)
+  }
+}
 
 function getCached(key) {
   const entry = restCache.get(key)
   if (!entry) return null
-  if (Date.now() - entry.ts > CACHE_TTL_MS) {
+  if (Date.now() - entry.ts > entry.ttl) {
     restCache.delete(key)
     return null
   }
   return entry
+}
+
+function setCache(key, status, contentType, body, ttl) {
+  if (restCache.size >= CACHE_MAX_ENTRIES) evictExpired()
+  if (restCache.size >= CACHE_MAX_ENTRIES) {
+    const oldest = restCache.keys().next().value
+    restCache.delete(oldest)
+  }
+  restCache.set(key, { ts: Date.now(), ttl, status, contentType, body })
 }
 
 async function fetchWithFallback(path, search) {
@@ -97,6 +120,7 @@ const server = createServer((req, res) => {
       wsClients: wss.clients.size,
       activeConnections,
       totalConnectionsServed,
+      cacheEntries: restCache.size,
     }
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify(payload))
@@ -109,16 +133,20 @@ const server = createServer((req, res) => {
 
     const cached = getCached(cacheKey)
     if (cached) {
+      const age = Math.round((Date.now() - cached.ts) / 1000)
+      console.log('[rest] cache HIT %s (age %ds, ttl %ds)', cacheKey, age, cached.ttl / 1000)
       res.writeHead(cached.status, {
         'Content-Type': cached.contentType,
         'Access-Control-Allow-Origin': '*',
         'X-Cache': 'HIT',
+        'X-Cache-Age': String(age),
       })
       res.end(cached.body)
       return
     }
 
-    console.log('[rest] proxying %s%s', path, url.search ? '?' + url.search.slice(1) : '')
+    const ttl = getTtlForPath(path)
+    console.log('[rest] proxying %s%s (ttl %ds)', path, url.search ? '?' + url.search.slice(1) : '', ttl / 1000)
     fetchWithFallback(path, url.search)
       .then(async (r) => {
         if (!r) { res.writeHead(502); res.end('All upstreams failed'); return }
@@ -126,7 +154,7 @@ const server = createServer((req, res) => {
         const body = Buffer.from(await r.arrayBuffer())
 
         if (r.status === 200) {
-          restCache.set(cacheKey, { ts: Date.now(), status: r.status, contentType, body })
+          setCache(cacheKey, r.status, contentType, body, ttl)
         }
 
         res.writeHead(r.status, {
