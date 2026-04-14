@@ -16,15 +16,18 @@ description: Stage, commit, push, clean up open PRs, and monitor the Render depl
 
 ## Clean up open PRs
 
-After pushing, check for any open pull requests that should be dealt with. Use the GitHub MCP (`user-github`).
+After pushing, check for any open pull requests — especially draft PRs left by Background Agents. Use the GitHub MCP (`user-github`).
 
 1. List open PRs via `list_pull_requests(owner: "ErikLydecker", repo: "sbn", state: "open")`.
 2. If there are no open PRs, skip this section.
-3. For each open PR, check the files changed via `pull_request_read(method: "get_files")` and assess:
-   - **Mergeable with no conflicts against main?** Squash-merge it via `merge_pull_request(merge_method: "squash")`.
-   - **Has conflicts or is stale/superseded?** Close it with a comment explaining why.
-4. After merging any PRs, run `git pull origin main` to sync locally.
-5. Report what was merged or closed.
+3. For each open PR:
+   - If it's a **draft**, mark it ready via `update_pull_request(pullNumber, draft: false)` first.
+   - Check the files via `pull_request_read(method: "get_files")` and assess merge readiness.
+   - **Mergeable?** Squash-merge via `merge_pull_request(merge_method: "squash")` with a clear commit title and message.
+   - **Has conflicts or is stale/superseded?** Close it via `update_pull_request(state: "closed")` with a comment explaining why.
+4. For each merged PR, update the linked Linear issue: add a comment with the PR link and move to Done.
+5. After merging any PRs, run `git pull origin main` to sync locally.
+6. Report what was merged or closed.
 
 ## Monitor Render deploy
 
