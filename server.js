@@ -5,7 +5,12 @@ import { WebSocketServer, WebSocket } from 'ws'
 
 const PORT = parseInt(process.env.PORT || '10000', 10)
 const DIST = join(import.meta.dirname, 'dist')
-const START_TIME = Date.now()
+const BOOT_TIME = Date.now()
+const REQUEST_TIMEOUT_MS = 5_000
+const CACHE_TTL_MS = 10_000
+const SHUTDOWN_GRACE_MS = 10_000
+
+let shuttingDown = false
 
 const MIME = {
   '.html': 'text/html',
@@ -30,12 +35,31 @@ const BINANCE_REST_ENDPOINTS = [
   'https://api.binance.com',
 ]
 
+/** Simple in-memory cache for REST proxy responses */
+const restCache = new Map()
+
+function getCached(key) {
+  const entry = restCache.get(key)
+  if (!entry) return null
+  if (Date.now() - entry.ts > CACHE_TTL_MS) {
+    restCache.delete(key)
+    return null
+  }
+  return entry
+}
+
 async function fetchWithFallback(path, search) {
   for (const base of BINANCE_REST_ENDPOINTS) {
     const url = base + path + search
+    const ac = new AbortController()
+    const timer = setTimeout(() => ac.abort(), REQUEST_TIMEOUT_MS)
     try {
       const start = Date.now()
-      const r = await fetch(url, { headers: { 'User-Agent': 'sbn-proxy' } })
+      const r = await fetch(url, {
+        headers: { 'User-Agent': 'sbn-proxy' },
+        signal: ac.signal,
+      })
+      clearTimeout(timer)
       const elapsed = Date.now() - start
       if (r.status === 418 || r.status === 451) {
         console.log('[rest] %s → %d (blocked, %dms), trying next', base, r.status, elapsed)
@@ -44,7 +68,9 @@ async function fetchWithFallback(path, search) {
       console.log('[rest] %s → %d (%dms)', base, r.status, elapsed)
       return r
     } catch (err) {
-      console.error('[rest] %s → error: %s', base, err.message)
+      clearTimeout(timer)
+      const reason = err.name === 'AbortError' ? `timeout (${REQUEST_TIMEOUT_MS}ms)` : err.message
+      console.error('[rest] %s → error: %s', base, reason)
       continue
     }
   }
@@ -52,33 +78,62 @@ async function fetchWithFallback(path, search) {
   return null
 }
 
+const wss = new WebSocketServer({ noServer: true })
+
 const server = createServer((req, res) => {
+  if (shuttingDown) {
+    res.writeHead(503, { Connection: 'close' })
+    res.end('Shutting down')
+    return
+  }
+
   const url = new URL(req.url || '/', `http://localhost:${PORT}`)
 
   if (url.pathname === '/health') {
-    const body = JSON.stringify({
+    const payload = {
       status: 'ok',
-      uptimeMs: Date.now() - START_TIME,
+      uptime: Math.round((Date.now() - BOOT_TIME) / 1000),
+      wsClients: wss.clients.size,
       activeConnections,
       totalConnectionsServed,
-    })
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(body)
+    res.end(JSON.stringify(payload))
     return
   }
 
   if (url.pathname.startsWith('/api-binance/')) {
     const path = url.pathname.replace('/api-binance', '')
+    const cacheKey = path + url.search
+
+    const cached = getCached(cacheKey)
+    if (cached) {
+      res.writeHead(cached.status, {
+        'Content-Type': cached.contentType,
+        'Access-Control-Allow-Origin': '*',
+        'X-Cache': 'HIT',
+      })
+      res.end(cached.body)
+      return
+    }
+
     console.log('[rest] proxying %s%s', path, url.search ? '?' + url.search.slice(1) : '')
     fetchWithFallback(path, url.search)
       .then(async (r) => {
         if (!r) { res.writeHead(502); res.end('All upstreams failed'); return }
+        const contentType = r.headers.get('content-type') || 'application/json'
+        const body = Buffer.from(await r.arrayBuffer())
+
+        if (r.status === 200) {
+          restCache.set(cacheKey, { ts: Date.now(), status: r.status, contentType, body })
+        }
+
         res.writeHead(r.status, {
-          'Content-Type': r.headers.get('content-type') || 'application/json',
+          'Content-Type': contentType,
           'Access-Control-Allow-Origin': '*',
+          'X-Cache': 'MISS',
         })
-        const body = await r.arrayBuffer()
-        res.end(Buffer.from(body))
+        res.end(body)
       })
       .catch((err) => {
         console.error('[rest] proxy error:', err.message)
@@ -108,9 +163,9 @@ const server = createServer((req, res) => {
   }
 })
 
-const wss = new WebSocketServer({ noServer: true })
-
 server.on('upgrade', (req, socket, head) => {
+  if (shuttingDown) { socket.destroy(); return }
+
   const url = req.url || ''
   console.log('[ws] upgrade request:', url)
 
@@ -137,6 +192,8 @@ server.on('upgrade', (req, socket, head) => {
     const upstream = new WebSocket(target)
     let msgCount = 0
     let closed = false
+    let upstreamReady = false
+    const buffered = []
 
     const cleanup = () => {
       if (closed) return
@@ -146,14 +203,25 @@ server.on('upgrade', (req, socket, head) => {
 
     upstream.on('open', () => {
       console.log('[ws] upstream open')
-      clientWs.on('message', (data, isBinary) => {
-        if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary: isBinary })
-      })
-      upstream.on('message', (data, isBinary) => {
-        msgCount++
-        if (msgCount === 1) console.log('[ws] first upstream message received, binary:', isBinary)
-        if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data, { binary: isBinary })
-      })
+      upstreamReady = true
+      for (const { data, isBinary } of buffered) {
+        upstream.send(data, { binary: isBinary })
+      }
+      buffered.length = 0
+    })
+
+    clientWs.on('message', (data, isBinary) => {
+      if (upstreamReady && upstream.readyState === WebSocket.OPEN) {
+        upstream.send(data, { binary: isBinary })
+      } else if (!upstreamReady) {
+        buffered.push({ data, isBinary })
+      }
+    })
+
+    upstream.on('message', (data, isBinary) => {
+      msgCount++
+      if (msgCount === 1) console.log('[ws] first upstream message received, binary:', isBinary)
+      if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data, { binary: isBinary })
     })
 
     upstream.on('error', (err) => {
@@ -181,12 +249,25 @@ server.listen(PORT, () => {
   console.log(`SBN proxy server listening on port ${PORT}`)
 })
 
-process.on('SIGTERM', () => {
-  console.log('[shutdown] SIGTERM received, closing gracefully…')
-  wss.clients.forEach((ws) => ws.close(1001, 'server shutting down'))
+function shutdown(signal) {
+  if (shuttingDown) return
+  shuttingDown = true
+  console.log(`[shutdown] ${signal} received, draining in ${SHUTDOWN_GRACE_MS}ms`)
+
+  for (const client of wss.clients) {
+    client.close(1001, 'server shutting down')
+  }
+
   server.close(() => {
     console.log('[shutdown] HTTP server closed')
     process.exit(0)
   })
-  setTimeout(() => process.exit(0), 5_000)
-})
+
+  setTimeout(() => {
+    console.warn('[shutdown] grace period expired, forcing exit')
+    process.exit(1)
+  }, SHUTDOWN_GRACE_MS).unref()
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => shutdown('SIGINT'))
