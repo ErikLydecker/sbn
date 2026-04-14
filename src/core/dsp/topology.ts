@@ -369,8 +369,8 @@ export function computeTopology(
     windingHistory: [...s.windingHistory, windingNumber].slice(-stabilityWindow),
     circulationHistory: [...s.circulationHistory, circulation].slice(-stabilityWindow),
     closureHistory: [...s.closureHistory, loopClosure].slice(-stabilityWindow),
-    fingerprintHistory: s.fingerprintHistory,
-    speciesCentroids: s.speciesCentroids,
+    fingerprintHistory: s.fingerprintHistory ?? [],
+    speciesCentroids: s.speciesCentroids ?? [],
   }
 
   const topologyStability = computeTopologyStability(updatedState)

@@ -126,7 +126,12 @@ async function restorePersistedState() {
         phaseBasis: savedSmooth.phaseBasisE1 && savedSmooth.phaseBasisE1.length > 0
           ? { e1: savedSmooth.phaseBasisE1, e2: savedSmooth.phaseBasisE2 ?? [] }
           : null,
-        topologyState: (savedSmooth.topologyState as SmoothClockState['topologyState']) ?? null,
+        topologyState: savedSmooth.topologyState
+          ? {
+              ...(savedSmooth.topologyState as NonNullable<SmoothClockState['topologyState']>),
+              speciesCentroids: (savedSmooth.topologyState as Record<string, unknown>).speciesCentroids as NonNullable<SmoothClockState['topologyState']>['speciesCentroids'] ?? [],
+            }
+          : null,
       }
 
       if (savedSmooth.goertzelSnapshot) {
