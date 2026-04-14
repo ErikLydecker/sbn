@@ -6,7 +6,7 @@ import { createGp, gpAddObservation, restoreGp } from './gaussian-process'
 import type { PersistedGpState, PersistedPortfolio } from '@/services/persistence/db'
 import { ucbAcquire, decodeParams } from './ucb'
 import { classifyRegime, regimeDirection } from './regimes'
-import { shouldEnter, shouldExit, kappaConfidence, topologyConfidence, shapeConfidence } from './signals'
+import { shouldEnter, shouldExit } from './signals'
 import { circDiff } from '@/core/math/circular'
 import { TRADING_CONFIG } from '@/config/trading'
 
@@ -87,6 +87,13 @@ export interface ClockSnapshot {
   topologyClass: string
   morphologySpecies: number
   curvatureConcentration: number
+  recurrenceRate: number
+  structureScore: number
+  h1Peak: number
+  h1Persistence: number
+  fragmentationRate: number
+  torsionEnergy: number
+  subspaceStability: number
 }
 
 export function portfolioTick(
@@ -133,8 +140,9 @@ export function portfolioTick(
     const params = decodeParams(xNorm)
     const dir = regimeDirection(regimeId)
 
-    if (shouldEnter(regimeId, vel, next.clockAccel, snapshot.kappa, params, next.cooldowns, snapshot.alpha, next.kappaPersistence, snapshot.topologyScore, snapshot.hurst, snapshot.curvatureConcentration)) {
-      openTrade(next, regimeId, dir as TradeDirection, snapshot.price, snapshot.clockPos, xNorm, params, snapshot.kappa, snapshot.rBar, snapshot.topologyScore, snapshot.curvatureConcentration, snapshot.morphologySpecies)
+    const { enter, crs } = shouldEnter(regimeId, vel, next.clockAccel, snapshot, params, next.cooldowns, next.kappaPersistence)
+    if (enter) {
+      openTrade(next, regimeId, dir as TradeDirection, snapshot, xNorm, params, crs)
     }
   }
 
@@ -165,42 +173,31 @@ function openTrade(
   state: PortfolioState,
   regimeId: RegimeId,
   dir: TradeDirection,
-  price: number,
-  clockPos: number,
+  snapshot: ClockSnapshot,
   xNorm: number[],
   params: number[],
-  kappa: number,
-  rBar: number,
-  topoScore?: number,
-  curvConc?: number,
-  species?: number,
+  crs: number,
 ): void {
   const sizeFrac = params[1]!
   const stop = params[2]!
   const exitPhase = params[3]!
 
-  const phase = Math.floor(regimeId / 2)
-  const isTurning = phase === 1 || phase === 3
-  const kappaScale = isTurning ? kappaConfidence(kappa) : 1
-  const topoScale = topoScore !== undefined ? topologyConfidence(topoScore) : 1
-  const shapeScale = (isTurning && curvConc !== undefined) ? shapeConfidence(curvConc) : 1
-  const confScale = kappaScale * topoScale * shapeScale
-  const sizeUsd = state.equity * sizeFrac * confScale
+  const sizeUsd = state.equity * sizeFrac * crs
 
   state.position = {
     direction: dir,
-    entryPrice: price,
+    entryPrice: snapshot.price,
     entryBar: state.barCount,
-    entryClockPos: clockPos,
+    entryClockPos: snapshot.clockPos,
     sizeUsd,
     stop,
     exitPhase,
     regimeId,
     paramVector: xNorm,
     entryEquity: state.equity,
-    entryKappa: kappa,
-    entryRBar: rBar,
-    entryMorphologySpecies: species,
+    entryKappa: snapshot.kappa,
+    entryRBar: snapshot.rBar,
+    entryMorphologySpecies: snapshot.morphologySpecies,
   }
 }
 
