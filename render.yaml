@@ -2,10 +2,10 @@ services:
   - type: web
     runtime: node
     name: sbn
-    plan: free
+    plan: starter
+    healthCheckPath: /health
     buildCommand: npm ci && npm run build
     startCommand: node server.js
-    healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
         value: "22"

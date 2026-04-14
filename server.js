@@ -25,6 +25,9 @@ const MIME = {
   '.map': 'application/json',
 }
 
+let activeConnections = 0
+let totalConnectionsServed = 0
+
 const BINANCE_WS = 'wss://stream.binance.com:9443/ws'
 const BINANCE_REST_ENDPOINTS = [
   'https://data-api.binance.vision',
@@ -91,6 +94,8 @@ const server = createServer((req, res) => {
       status: 'ok',
       uptime: Math.round((Date.now() - BOOT_TIME) / 1000),
       wsClients: wss.clients.size,
+      activeConnections,
+      totalConnectionsServed,
     }
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify(payload))
@@ -180,10 +185,21 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (clientWs) => {
     const target = `${BINANCE_WS}/${stream}`
     console.log('[ws] client connected, opening upstream:', target)
+
+    activeConnections++
+    totalConnectionsServed++
+
     const upstream = new WebSocket(target)
     let msgCount = 0
+    let closed = false
     let upstreamReady = false
     const buffered = []
+
+    const cleanup = () => {
+      if (closed) return
+      closed = true
+      activeConnections--
+    }
 
     upstream.on('open', () => {
       console.log('[ws] upstream open')
@@ -214,6 +230,7 @@ server.on('upgrade', (req, socket, head) => {
     })
     upstream.on('close', (code) => {
       console.log('[ws] upstream closed, code:', code, 'after', msgCount, 'msgs')
+      cleanup()
       clientWs.close()
     })
     clientWs.on('error', (err) => {
@@ -222,6 +239,7 @@ server.on('upgrade', (req, socket, head) => {
     })
     clientWs.on('close', (code) => {
       console.log('[ws] client closed, code:', code)
+      cleanup()
       upstream.close()
     })
   })
