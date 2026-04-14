@@ -9,6 +9,7 @@ const BOOT_TIME = Date.now()
 const REQUEST_TIMEOUT_MS = 5_000
 const CACHE_TTL_MS = 10_000
 const SHUTDOWN_GRACE_MS = 10_000
+const UPSTREAM_CONNECT_TIMEOUT_MS = 5_000
 
 let shuttingDown = false
 
@@ -193,15 +194,33 @@ server.on('upgrade', (req, socket, head) => {
     let msgCount = 0
     let closed = false
     let upstreamReady = false
+    let clientGone = false
     const buffered = []
 
     const cleanup = () => {
       if (closed) return
       closed = true
       activeConnections--
+      clearTimeout(connectTimer)
     }
 
+    const connectTimer = setTimeout(() => {
+      if (!upstreamReady && !closed) {
+        console.log('[ws] upstream connect timeout after %dms', UPSTREAM_CONNECT_TIMEOUT_MS)
+        cleanup()
+        upstream.close()
+        clientWs.close(1013, 'upstream connect timeout')
+      }
+    }, UPSTREAM_CONNECT_TIMEOUT_MS)
+
     upstream.on('open', () => {
+      clearTimeout(connectTimer)
+      if (clientGone) {
+        console.log('[ws] upstream opened but client already gone, closing cleanly')
+        cleanup()
+        upstream.close()
+        return
+      }
       console.log('[ws] upstream open')
       upstreamReady = true
       for (const { data, isBinary } of buffered) {
@@ -225,22 +244,36 @@ server.on('upgrade', (req, socket, head) => {
     })
 
     upstream.on('error', (err) => {
+      if (clientGone && !upstreamReady) {
+        console.log('[ws] upstream closed during handshake (client already disconnected)')
+        return
+      }
       console.error('[ws] upstream error:', err.message)
+      cleanup()
       clientWs.close()
     })
     upstream.on('close', (code) => {
+      if (clientGone && !upstreamReady) return
       console.log('[ws] upstream closed, code:', code, 'after', msgCount, 'msgs')
       cleanup()
       clientWs.close()
     })
     clientWs.on('error', (err) => {
       console.error('[ws] client error:', err.message)
+      clientGone = true
+      cleanup()
       upstream.close()
     })
     clientWs.on('close', (code) => {
       console.log('[ws] client closed, code:', code)
+      clientGone = true
       cleanup()
-      upstream.close()
+      if (upstreamReady) {
+        upstream.close()
+      } else {
+        console.log('[ws] client disconnected before upstream ready, closing upstream')
+        upstream.close()
+      }
     })
   })
 })
