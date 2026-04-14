@@ -28,12 +28,23 @@ const BINANCE_REST_ENDPOINTS = [
 
 async function fetchWithFallback(path, search) {
   for (const base of BINANCE_REST_ENDPOINTS) {
+    const url = base + path + search
     try {
-      const r = await fetch(base + path + search, { headers: { 'User-Agent': 'sbn-proxy' } })
-      if (r.status === 418 || r.status === 451) continue
+      const start = Date.now()
+      const r = await fetch(url, { headers: { 'User-Agent': 'sbn-proxy' } })
+      const elapsed = Date.now() - start
+      if (r.status === 418 || r.status === 451) {
+        console.log('[rest] %s → %d (blocked, %dms), trying next', base, r.status, elapsed)
+        continue
+      }
+      console.log('[rest] %s → %d (%dms)', base, r.status, elapsed)
       return r
-    } catch { continue }
+    } catch (err) {
+      console.error('[rest] %s → error: %s', base, err.message)
+      continue
+    }
   }
+  console.error('[rest] all endpoints failed for %s%s', path, search)
   return null
 }
 
@@ -42,6 +53,7 @@ const server = createServer((req, res) => {
 
   if (url.pathname.startsWith('/api-binance/')) {
     const path = url.pathname.replace('/api-binance', '')
+    console.log('[rest] proxying %s%s', path, url.search ? '?' + url.search.slice(1) : '')
     fetchWithFallback(path, url.search)
       .then(async (r) => {
         if (!r) { res.writeHead(502); res.end('All upstreams failed'); return }
@@ -52,7 +64,8 @@ const server = createServer((req, res) => {
         const body = await r.arrayBuffer()
         res.end(Buffer.from(body))
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('[rest] proxy error:', err.message)
         res.writeHead(502)
         res.end('Upstream error')
       })
