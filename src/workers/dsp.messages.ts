@@ -112,6 +112,40 @@ export interface TopologyWorkerData {
   curvatureSignature?: number[]
 }
 
+export interface CrsSnapshotData {
+  timestamp: number
+  regimeId: number
+  phase: number
+  direction: 1 | -1
+  clockVel: number
+  clockAccel: number
+  kappaPersistence: number
+  kappa: number
+  ppc: number
+  hurst: number
+  topologyScore: number
+  topologyClass: string
+  recurrenceRate: number
+  structureScore: number
+  curvatureConcentration: number
+  h1Peak: number
+  torsionEnergy: number
+  subspaceStability: number
+  alphaPhase: number
+  coherenceGroup: number
+  regimeGroup: number
+  topologyGroup: number
+  geometryGroup: number
+  trendGroup: number
+  composite: number
+  threshold: number
+  entered: boolean
+  cooldownActive: boolean
+  directionMatch: boolean
+  accelMatch: boolean
+  price: number
+}
+
 export interface BarTimingData {
   lastBarTime: number
   intervalMs: number
@@ -127,6 +161,7 @@ export type WorkerOutbound =
   | { type: 'polarRose'; data: PolarRoseData }
   | { type: 'voxelSnapshot'; data: VoxelSnapshotData }
   | { type: 'topology'; data: TopologyWorkerData }
+  | { type: 'crsSnapshot'; data: CrsSnapshotData }
   | { type: 'barCount'; count: number }
   | { type: 'candles'; bars: OhlcBar[] }
   | { type: 'barTiming'; data: BarTimingData }

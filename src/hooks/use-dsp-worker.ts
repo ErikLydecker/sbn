@@ -9,6 +9,7 @@ import { useCoherenceHistoryStore } from '@/stores/coherence-history.store'
 import { useBarTimerStore } from '@/stores/bar-timer.store'
 import { useTopologyStore } from '@/stores/topology.store'
 import { useMorphologyStore } from '@/stores/morphology.store'
+import { useCrsReadinessStore } from '@/stores/crs-readiness.store'
 import { ConnectionManager } from '@/services/binance/connection-manager'
 import { fetchHistoricalKlines } from '@/services/binance/klines'
 import {
@@ -56,6 +57,7 @@ export function useDspWorker() {
   const pushShape = useTopologyStore((s) => s.pushShape)
   const pushMorphology = useMorphologyStore((s) => s.push)
   const recordMorphologyTrade = useMorphologyStore((s) => s.recordTradeResult)
+  const pushCrs = useCrsReadinessStore((s) => s.push)
 
   const rawWindow = useSettingsStore((s) => s.rawWindow)
   const manualK = useSettingsStore((s) => s.manualFrequencyK)
@@ -102,6 +104,9 @@ export function useDspWorker() {
           return
         case 'voxelSnapshot':
           voxelBuffer.push(msg.data)
+          return
+        case 'crsSnapshot':
+          pushCrs(msg.data)
           return
         case 'barTiming':
           setBarTiming(msg.data.lastBarTime, msg.data.intervalMs)
@@ -207,7 +212,7 @@ export function useDspWorker() {
       workerRef.current = null
       connRef.current = null
     }
-  }, [pushPrice, setCandles, setRaw, setSmooth, setEventBarCount, updatePortfolio, setGeometry, setConnectionStatus, setConnectionHealth, timeframe, backfillToWorker, pushTopology, pushShape, pushMorphology, recordMorphologyTrade])
+  }, [pushPrice, setCandles, setRaw, setSmooth, setEventBarCount, updatePortfolio, setGeometry, setConnectionStatus, setConnectionHealth, timeframe, backfillToWorker, pushTopology, pushShape, pushMorphology, recordMorphologyTrade, pushCrs])
 
   useEffect(() => {
     const worker = workerRef.current

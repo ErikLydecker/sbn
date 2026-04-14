@@ -11,6 +11,7 @@ import {
   Box,
   Shapes,
   Fingerprint,
+  Gauge,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -20,6 +21,7 @@ const NAV_ITEMS: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/history', label: 'History', icon: History },
   { to: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { to: '/readiness', label: 'Readiness', icon: Gauge },
   { to: '/geometry', label: 'Geometry', icon: Hexagon },
   { to: '/topology', label: 'Topology', icon: Orbit },
   { to: '/morphology', label: 'Morphology', icon: Fingerprint },
